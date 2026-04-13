@@ -7,10 +7,13 @@
   "access_control_section",
   "allowed_users",
   "ai_settings_section",
-  "anthropic_api_key",
-  "ai_model",
-  "column_break_1",
+  "ai_provider",
   "enable_ai_analysis",
+  "column_break_ai1",
+  "anthropic_api_key",
+  "openai_api_key",
+  "column_break_1",
+  "ai_model",
   "email_settings_section",
   "auto_email_enabled",
   "email_frequency",
@@ -37,27 +40,47 @@
    "label": "AI Settings"
   },
   {
-   "fieldname": "anthropic_api_key",
-   "fieldtype": "Password",
-   "label": "Anthropic API Key",
-   "description": "Your Anthropic API key for Claude AI analysis"
-  },
-  {
-   "fieldname": "ai_model",
+   "fieldname": "ai_provider",
    "fieldtype": "Select",
-   "label": "AI Model",
-   "options": "claude-sonnet-4-20250514\nclaude-3-5-haiku-20241022",
-   "default": "claude-sonnet-4-20250514"
-  },
-  {
-   "fieldname": "column_break_1",
-   "fieldtype": "Column Break"
+   "label": "AI Provider",
+   "options": "Anthropic\nOpenAI",
+   "default": "Anthropic",
+   "reqd": 0
   },
   {
    "fieldname": "enable_ai_analysis",
    "fieldtype": "Check",
    "label": "Enable AI Analysis",
    "default": "1"
+  },
+  {
+   "fieldname": "column_break_ai1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "anthropic_api_key",
+   "fieldtype": "Password",
+   "label": "Anthropic API Key",
+   "description": "Your Anthropic API key for Claude AI",
+   "depends_on": "eval:doc.ai_provider=='Anthropic'"
+  },
+  {
+   "fieldname": "openai_api_key",
+   "fieldtype": "Password",
+   "label": "OpenAI API Key",
+   "description": "Your OpenAI API key for GPT models",
+   "depends_on": "eval:doc.ai_provider=='OpenAI'"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "ai_model",
+   "fieldtype": "Select",
+   "label": "AI Model",
+   "options": "claude-sonnet-4-20250514\nclaude-3-5-haiku-20241022\ngpt-4o\ngpt-4o-mini\ngpt-4-turbo",
+   "default": "claude-sonnet-4-20250514"
   },
   {
    "fieldname": "email_settings_section",

@@ -16,21 +16,21 @@ def get_ai_analysis(company=None):
 		return {"error": _("No company specified")}
 
 	settings = frappe.get_single("Management Reports Settings")
-	api_key = settings.get_password("anthropic_api_key") if settings else None
-
-	if not api_key:
-		return {"error": _("Please configure your Anthropic API key in Management Reports Settings. Go to: /app/management-reports-settings")}
-
-	if not settings.enable_ai_analysis:
+	if not settings or not settings.enable_ai_analysis:
 		return {"error": _("AI Analysis is disabled in Management Reports Settings")}
 
-	model = settings.ai_model or "claude-sonnet-4-20250514"
+	provider = settings.ai_provider or "Anthropic"
+	api_key = get_api_key(settings, provider)
+
+	if not api_key:
+		return {"error": _("Please configure your {0} API key in Management Reports Settings. Go to: /app/management-reports-settings").format(provider)}
+
+	model = settings.ai_model or get_default_model(provider)
 	data = gather_analysis_data(company)
 	prompt = build_analysis_prompt(data, company)
 
 	try:
-		raw_response = call_claude_api(api_key, model, prompt)
-		# Parse structured response
+		raw_response = call_ai_api(provider, api_key, model, prompt)
 		result = parse_ai_response(raw_response, data)
 		return result
 	except Exception as e:
@@ -52,12 +52,13 @@ def chat_with_ai(company=None, message="", history="[]"):
 		return {"error": _("Please enter a message")}
 
 	settings = frappe.get_single("Management Reports Settings")
-	api_key = settings.get_password("anthropic_api_key") if settings else None
+	provider = settings.ai_provider or "Anthropic"
+	api_key = get_api_key(settings, provider)
 
 	if not api_key:
-		return {"error": _("Please configure your Anthropic API key in Management Reports Settings.")}
+		return {"error": _("Please configure your {0} API key in Management Reports Settings.").format(provider)}
 
-	model = settings.ai_model or "claude-sonnet-4-20250514"
+	model = settings.ai_model or get_default_model(provider)
 	data = gather_analysis_data(company)
 	currency = data.get("currency", "SAR")
 
@@ -106,7 +107,7 @@ IMPORTANT RESPONSE FORMAT:
 	messages.append({"role": "user", "content": message})
 
 	try:
-		response = call_claude_api_with_system(api_key, model, system_prompt, messages)
+		response = call_ai_api_with_system(provider, api_key, model, system_prompt, messages)
 		return {"response": response}
 	except Exception as e:
 		frappe.log_error(f"AI Chat Error: {str(e)}", "Management Reports AI Chat")
@@ -282,6 +283,34 @@ def parse_ai_response(raw_response, data):
 		}
 
 
+def get_api_key(settings, provider):
+	"""Get API key based on selected provider"""
+	if provider == "OpenAI":
+		return settings.get_password("openai_api_key") if settings else None
+	return settings.get_password("anthropic_api_key") if settings else None
+
+
+def get_default_model(provider):
+	"""Get default model for a provider"""
+	if provider == "OpenAI":
+		return "gpt-4o"
+	return "claude-sonnet-4-20250514"
+
+
+def call_ai_api(provider, api_key, model, prompt):
+	"""Route single-prompt call to the correct provider"""
+	if provider == "OpenAI":
+		return call_openai_api(api_key, model, prompt)
+	return call_claude_api(api_key, model, prompt)
+
+
+def call_ai_api_with_system(provider, api_key, model, system_prompt, messages):
+	"""Route system-prompt call to the correct provider"""
+	if provider == "OpenAI":
+		return call_openai_api_with_system(api_key, model, system_prompt, messages)
+	return call_claude_api_with_system(api_key, model, system_prompt, messages)
+
+
 def call_claude_api(api_key, model, prompt):
 	"""Call Claude API with a single prompt"""
 	import requests
@@ -333,3 +362,57 @@ def call_claude_api_with_system(api_key, model, system_prompt, messages):
 		frappe.throw(f"Claude API error: {error_msg}")
 
 	return response.json()["content"][0]["text"]
+
+
+def call_openai_api(api_key, model, prompt):
+	"""Call OpenAI API with a single prompt"""
+	import requests
+
+	response = requests.post(
+		"https://api.openai.com/v1/chat/completions",
+		headers={
+			"Authorization": f"Bearer {api_key}",
+			"Content-Type": "application/json",
+		},
+		json={
+			"model": model,
+			"max_tokens": 4000,
+			"messages": [{"role": "user", "content": prompt}],
+		},
+		timeout=90,
+	)
+
+	if response.status_code != 200:
+		error_msg = response.json().get("error", {}).get("message", response.text)
+		frappe.throw(f"OpenAI API error: {error_msg}")
+
+	return response.json()["choices"][0]["message"]["content"]
+
+
+def call_openai_api_with_system(api_key, model, system_prompt, messages):
+	"""Call OpenAI API with system prompt and message history"""
+	import requests
+
+	openai_messages = [{"role": "system", "content": system_prompt}]
+	for msg in messages:
+		openai_messages.append({"role": msg["role"], "content": msg["content"]})
+
+	response = requests.post(
+		"https://api.openai.com/v1/chat/completions",
+		headers={
+			"Authorization": f"Bearer {api_key}",
+			"Content-Type": "application/json",
+		},
+		json={
+			"model": model,
+			"max_tokens": 2000,
+			"messages": openai_messages,
+		},
+		timeout=60,
+	)
+
+	if response.status_code != 200:
+		error_msg = response.json().get("error", {}).get("message", response.text)
+		frappe.throw(f"OpenAI API error: {error_msg}")
+
+	return response.json()["choices"][0]["message"]["content"]
