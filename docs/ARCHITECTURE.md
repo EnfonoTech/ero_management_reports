@@ -18,6 +18,13 @@ management_reports/                          # Frappe app root (pip-installable)
 │   ├── modules.txt                      # Module list: "Management Reports"
 │   ├── patches.txt                      # Migration patches (empty)
 │   ├── public/                          # Static assets (.gitkeep)
+│   ├── utils/                           # Site-agnostic reporting layer
+│   │   ├── settings.py                  # Settings reads safe before DocType sync
+│   │   ├── dimensions.py                # Branch dimension resolution
+│   │   ├── scope.py                     # User Permission branch allowlist
+│   │   ├── currency.py                  # Currency / abbr, no hardcoded region
+│   │   └── query.py                     # Shared Sales Invoice query skeleton
+│   ├── tests/                           # test_dimensions, test_scope, test_reports
 │   └── management_reports/                  # "Management Reports" module
 │       ├── boot.py                      # boot_session hook — passes access flag to frontend
 │       ├── permissions.py               # Core permission logic (is_allowed_user, check_access)
@@ -67,7 +74,43 @@ if (frappe.boot.management_reports_access === false) {
 }
 ```
 
-### 3. Company Filter Pattern
+### 2b. Branch Scope (row-level security)
+Script reports query the database directly, which bypasses Frappe's permission
+layer. `utils/scope.py` closes that hole by turning native **User Permission**
+records into an explicit branch allowlist applied to every WHERE clause:
+
+```
+No User Permission on the branch doctype  → get_permitted_branches() returns None → unrestricted
+User Permission on "Riyadh - H"           → returns ["Riyadh - H"]                → WHERE branch IN (...)
+Permission on a group node                → descendants included unless hide_descendants
+Administrator                             → always None (unrestricted)
+```
+
+`None` means unrestricted; a list means restricted. Never treat a falsy return as
+unrestricted — an empty list must filter everything out, or a user permitted on
+zero branches would silently see all of them.
+
+### 3. Branch Dimension Pattern
+No report hardcodes `si.cost_center`. `utils/dimensions.py` resolves the branch
+field from Settings and validates it against Sales Invoice meta before it reaches
+SQL. Defaults to `cost_center`; a site modelling branches as Warehouse or a
+custom Accounting Dimension changes one Settings field, not six reports.
+
+`boot.py` publishes the resolved descriptor as
+`frappe.boot.management_reports_branch` (`fieldname`, `doctype`, `label`,
+`filter_by_company`) so report filter JS is dimension-agnostic too. The
+`filter_by_company` flag exists because Cost Center and Warehouse are
+company-scoped while the ERPNext Branch doctype is not — filtering that link
+query by company would return nothing.
+
+### 4. COGS Availability
+`Settings → COGS Source` is `Item Valuation` (Qty x Incoming Rate) or `None`.
+Sites without perpetual inventory leave `incoming_rate` at zero, which turns
+every margin into a meaningless 100%. Setting `None` drops the COGS, Profit and
+Margin columns and their summary tiles instead of publishing untrustworthy
+numbers.
+
+### 5. Company Filter Pattern
 Every report JS file has Company as the first required filter:
 ```javascript
 {
@@ -80,42 +123,38 @@ Every report JS file has Company as the first required filter:
 }
 ```
 
-Branch filter is linked to Company:
+Branch filter reads the dimension from boot instead of naming a doctype:
 ```javascript
 {
     fieldname: "branch",
+    label: __(management_reports_branch().label),
     fieldtype: "Link",
-    options: "Cost Center",
+    options: management_reports_branch().doctype,
     get_query: function() {
+        if (!management_reports_branch().filter_by_company) return {};
         return { filters: { company: frappe.query_report.get_filter_value("company") } };
     }
 }
 ```
 
-Python side adds `AND si.company = %(company)s` in all queries.
+Python side never builds SQL by string concatenation. `utils/query.base_query()`
+returns a `frappe.qb` skeleton with docstatus, date range, company, branch filter
+and branch scope already applied; each report adds its own select and group-by.
 
-### 4. Dynamic Currency
-Never hardcode "SAR". Every report has:
-```python
-def get_currency(filters):
-    company = filters.get("company")
-    if company:
-        return frappe.get_cached_value("Company", company, "default_currency") or "SAR"
-    return "SAR"
-```
+### 6. Dynamic Currency
+Never hardcode "SAR" — that mislabels every figure on a UAE or India site. Use
+`utils/currency.get_currency(company)`, which falls back to the site default via
+`erpnext.get_default_currency()`.
 
-Column labels use: `_("Revenue ({0})").format(currency)`
+Column labels use `currency_label("Revenue", currency)` → `"Revenue (SAR)"`.
 
-### 5. Dynamic Company Abbreviation
-For chart labels, strip company abbreviation from Cost Center names:
-```python
-abbr = frappe.get_cached_value("Company", company, "abbr") or ""
-short_name = branch.replace(f" - {abbr}", "").strip()
-```
+### 7. Dynamic Company Abbreviation
+For chart labels, strip the company abbreviation ERPNext appends to Cost Center
+names: `utils/currency.strip_abbr(branch, abbr)`.
 
-### 6. Data Source: Sales Invoice
+### 8. Data Source: Sales Invoice
 All reports query from these two tables:
-- **`tabSales Invoice`** (alias `si`) — Header: posting_date, company, cost_center, customer, grand_total, docstatus, is_return
+- **`tabSales Invoice`** (alias `si`) — Header: posting_date, company, branch dimension (default `cost_center`), customer, grand_total, docstatus, is_return
 - **`tabSales Invoice Item`** (alias `sii`) — Lines: item_code, item_name, item_group, amount, qty, incoming_rate, stock_uom
 
 Key calculations:
@@ -128,16 +167,19 @@ Key calculations:
 | Margin % | `profit / revenue * 100` |
 | Only submitted | `si.docstatus = 1` |
 
-### 7. MTD Fallback Logic
-Dashboard KPIs show Month-to-Date data. If MTD revenue is 0 (e.g., it's early in the month or no data yet), it falls back to last completed month:
+### 9. MTD Fallback Logic
+Dashboard KPIs show Month-to-Date data. If MTD revenue is 0 (early in the month, or no data yet), it falls back to the last completed month:
 ```python
-if not mtd_revenue:
-    prev_month_end = add_months(mtd_start, 0) - timedelta(days=1)
-    prev_month_start = get_first_day(prev_month_end)
-    # Query previous month data...
-    last_month_label = "Mar 2026"  # Dynamic label
+if not mtd.revenue:
+    prev_month_end = add_days(mtd_start, -1)
+    prev_month = get_period_totals(company, get_first_day(prev_month_end), prev_month_end)
+    last_month_label = format_month_key(prev_month_end.strftime("%Y-%m"))  # "Mar 2026"
 ```
 Frontend relabels KPI cards: "Mar 2026 Revenue" instead of "MTD Revenue".
+
+`get_period_totals()` returns revenue, invoice count and customer count in one
+query per period, and goes through `base_query()` — so a branch-restricted user's
+KPI cards match the reports they can actually open.
 
 ## AI Integration Architecture
 
@@ -192,12 +234,19 @@ Here's the revenue comparison:
 | Field | Type | Details |
 |-------|------|---------|
 | allowed_users | Table (Management Reports User) | Users with access |
+| branch_dimension_fieldname | Data | Link fieldname on Sales Invoice. Default `cost_center`. Validated on save |
+| branch_dimension_doctype | Data | Read-only, derived from the fieldname |
+| branch_label | Data | What this site calls a branch — Branch / Outlet / Station. Default `Branch` |
+| cogs_source | Select | `Item Valuation` or `None`. `None` hides COGS/Profit/Margin |
 | anthropic_api_key | Password | Claude API key |
 | ai_model | Select | claude-sonnet-4-20250514, claude-3-5-haiku-20241022 |
 | enable_ai_analysis | Check | Default: 1 |
-| auto_email_enabled | Check | For future auto email feature |
+| auto_email_enabled | Check | For future auto email feature — no scheduler wired yet |
 | email_frequency | Select | Daily/Weekly/Monthly |
 | email_recipients | Small Text | Comma-separated emails |
+
+The Data Source fields are set once per site at deployment. They are the only
+thing that should differ between sites — app code is identical everywhere.
 
 ### Management Reports User (Child Table)
 | Field | Type | Details |
@@ -284,11 +333,28 @@ bench --site your-site.localhost migrate
 bench --site your-site.localhost migrate && bench build --app management_reports && bench --site your-site.localhost clear-cache
 ```
 
+## Tests
+
+```bash
+bench --site your-site.localhost run-tests --app management_reports
+```
+
+`management_reports/tests/` covers the dimension resolver, the branch scope layer
+and end-to-end execution of all six reports. Assertions are data-independent, so
+the suite passes on a fresh site and on one with years of invoices.
+
+The scope tests matter most: they pin the `None` (unrestricted) versus list
+(restricted) distinction, and assert that a permission naming a nonexistent
+branch yields zero rows rather than the whole company.
+
 ## Environment Notes
 
-- **Bench directory:** `/Users/sayanthns/Tabiah`
-- **App directory:** `/Users/sayanthns/Tabiah/apps/management_reports`
-- **Site:** `tabiah.localhost` (port 8002)
-- **PATH for bench:** `export PATH="/opt/homebrew/bin:/Users/sayanthns/.pyenv/shims:/Users/sayanthns/.pyenv/bin:/Users/sayanthns/.local/bin:$PATH"`
-- **Redis ports:** 13001 (cache), 11001 (queue) — may need manual start: `redis-server --port 13001 --daemonize yes`
+- **App code is identical on every site.** Per-site variance belongs in
+  Management Reports Settings, never in a branch or a fork.
 - **GitHub repo:** https://github.com/EnfonoTech/ero_management_reports
+- **Dev bench:** whichever bench you have the app installed in — export the bench
+  PATH first if `bench` is not resolvable, e.g.
+  `export PATH="/opt/homebrew/bin:$HOME/.pyenv/shims:$HOME/.local/bin:$PATH"`
+- **Redis:** if bench reports `redis_cache not running`, start the ports named in
+  the bench's `sites/common_site_config.json`, e.g.
+  `redis-server --port 13000 --daemonize yes`

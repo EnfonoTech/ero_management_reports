@@ -1,3 +1,16 @@
+// Branch dimension for this site, published by boot.py. Falls back to Cost
+// Center so the filter still works if boot data is unavailable.
+function management_reports_branch() {
+	return (
+		(frappe.boot && frappe.boot.management_reports_branch) || {
+			fieldname: "cost_center",
+			doctype: "Cost Center",
+			label: "Branch",
+			filter_by_company: true,
+		}
+	);
+}
+
 frappe.query_reports["Top Selling Items"] = {
 	filters: [
 		{
@@ -57,10 +70,12 @@ frappe.query_reports["Top Selling Items"] = {
 		},
 		{
 			fieldname: "branch",
-			label: __("Branch"),
+			label: __(management_reports_branch().label),
 			fieldtype: "Link",
-			options: "Cost Center",
+			options: management_reports_branch().doctype,
 			get_query: function () {
+				// Only company-scoped dimensions accept a company filter.
+				if (!management_reports_branch().filter_by_company) return {};
 				var company = frappe.query_report.get_filter_value("company");
 				return { filters: { company: company } };
 			},

@@ -1,6 +1,9 @@
 import frappe
 from frappe import _
 
+SETTINGS_DOCTYPE = "Management Reports Settings"
+USER_TABLE_DOCTYPE = "Management Reports User"
+
 
 def is_allowed_user(user=None):
 	"""Check if user is allowed to access management reports.
@@ -12,15 +15,16 @@ def is_allowed_user(user=None):
 	if user == "Administrator":
 		return True
 
-	try:
-		allowed_users = frappe.db.get_all(
-			"Management Reports User",
-			filters={"parenttype": "Management Reports Settings", "parent": "Management Reports Settings"},
-			pluck="user",
-		)
-	except Exception:
-		# Table may not exist yet during install
+	# The table is absent mid-install and mid-migrate; checking beats catching,
+	# which would also swallow real errors and lock everyone out silently.
+	if not frappe.db.table_exists(USER_TABLE_DOCTYPE):
 		return False
+
+	allowed_users = frappe.db.get_all(
+		USER_TABLE_DOCTYPE,
+		filters={"parenttype": SETTINGS_DOCTYPE, "parent": SETTINGS_DOCTYPE},
+		pluck="user",
+	)
 
 	# If no users configured, only Administrator has access
 	if not allowed_users:

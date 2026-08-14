@@ -1,7 +1,9 @@
-import frappe
 import json
+
+import frappe
 from frappe import _
-from frappe.utils import nowdate, getdate, add_months
+from frappe.utils import add_months, getdate, nowdate
+
 from management_reports.management_reports.permissions import check_access
 
 
@@ -23,7 +25,11 @@ def get_ai_analysis(company=None):
 	api_key = get_api_key(settings, provider)
 
 	if not api_key:
-		return {"error": _("Please configure your {0} API key in Management Reports Settings. Go to: /app/management-reports-settings").format(provider)}
+		return {
+			"error": _(
+				"Please configure your {0} API key in Management Reports Settings. Go to: /app/management-reports-settings"
+			).format(provider)
+		}
 
 	model = settings.ai_model or get_default_model(provider)
 	data = gather_analysis_data(company)
@@ -34,7 +40,7 @@ def get_ai_analysis(company=None):
 		result = parse_ai_response(raw_response, data)
 		return result
 	except Exception as e:
-		frappe.log_error(f"AI Analysis Error: {str(e)}", "Management Reports AI")
+		frappe.log_error(f"AI Analysis Error: {e!s}", "Management Reports AI")
 		return {"error": _("Failed to generate analysis: {0}").format(str(e))}
 
 
@@ -56,7 +62,9 @@ def chat_with_ai(company=None, message="", history="[]"):
 	api_key = get_api_key(settings, provider)
 
 	if not api_key:
-		return {"error": _("Please configure your {0} API key in Management Reports Settings.").format(provider)}
+		return {
+			"error": _("Please configure your {0} API key in Management Reports Settings.").format(provider)
+		}
 
 	model = settings.ai_model or get_default_model(provider)
 	data = gather_analysis_data(company)
@@ -110,7 +118,7 @@ IMPORTANT RESPONSE FORMAT:
 		response = call_ai_api_with_system(provider, api_key, model, system_prompt, messages)
 		return {"response": response}
 	except Exception as e:
-		frappe.log_error(f"AI Chat Error: {str(e)}", "Management Reports AI Chat")
+		frappe.log_error(f"AI Chat Error: {e!s}", "Management Reports AI Chat")
 		return {"error": str(e)}
 
 
@@ -120,7 +128,8 @@ def gather_analysis_data(company):
 	three_months_ago = add_months(today, -3)
 	currency = frappe.get_cached_value("Company", company, "default_currency") or "SAR"
 
-	monthly_branch = frappe.db.sql("""
+	monthly_branch = frappe.db.sql(
+		"""
 		SELECT
 			DATE_FORMAT(si.posting_date, '%%Y-%%m') AS month,
 			si.cost_center AS branch,
@@ -133,9 +142,13 @@ def gather_analysis_data(company):
 			AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
 		GROUP BY DATE_FORMAT(si.posting_date, '%%Y-%%m'), si.cost_center
 		ORDER BY month, si.cost_center
-	""", {"company": company, "from_date": three_months_ago, "to_date": today}, as_dict=1)
+	""",
+		{"company": company, "from_date": three_months_ago, "to_date": today},
+		as_dict=1,
+	)
 
-	top_items = frappe.db.sql("""
+	top_items = frappe.db.sql(
+		"""
 		SELECT sii.item_name,
 			ROUND(SUM(sii.amount), 2) AS revenue,
 			ROUND(SUM(sii.qty), 2) AS qty,
@@ -146,9 +159,13 @@ def gather_analysis_data(company):
 			AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
 		GROUP BY sii.item_code, sii.item_name
 		ORDER BY SUM(sii.amount) DESC LIMIT 10
-	""", {"company": company, "from_date": three_months_ago, "to_date": today}, as_dict=1)
+	""",
+		{"company": company, "from_date": three_months_ago, "to_date": today},
+		as_dict=1,
+	)
 
-	top_customers = frappe.db.sql("""
+	top_customers = frappe.db.sql(
+		"""
 		SELECT si.customer_name, COUNT(si.name) AS invoices,
 			ROUND(SUM(si.grand_total), 2) AS revenue
 		FROM `tabSales Invoice` si
@@ -156,9 +173,13 @@ def gather_analysis_data(company):
 			AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
 		GROUP BY si.customer, si.customer_name
 		ORDER BY SUM(si.grand_total) DESC LIMIT 10
-	""", {"company": company, "from_date": three_months_ago, "to_date": today}, as_dict=1)
+	""",
+		{"company": company, "from_date": three_months_ago, "to_date": today},
+		as_dict=1,
+	)
 
-	negative_margin = frappe.db.sql("""
+	negative_margin = frappe.db.sql(
+		"""
 		SELECT sii.item_name,
 			ROUND(SUM(sii.amount), 2) AS revenue,
 			ROUND(SUM(sii.qty * sii.incoming_rate), 2) AS cogs
@@ -169,7 +190,10 @@ def gather_analysis_data(company):
 		GROUP BY sii.item_code, sii.item_name
 		HAVING SUM(sii.amount) < SUM(sii.qty * sii.incoming_rate)
 		ORDER BY (SUM(sii.amount) - SUM(sii.qty * sii.incoming_rate)) ASC LIMIT 10
-	""", {"company": company, "from_date": three_months_ago, "to_date": today}, as_dict=1)
+	""",
+		{"company": company, "from_date": three_months_ago, "to_date": today},
+		as_dict=1,
+	)
 
 	return {
 		"company": company,
@@ -276,11 +300,7 @@ def parse_ai_response(raw_response, data):
 		return result
 	except (json.JSONDecodeError, IndexError):
 		# Fallback: return as markdown
-		return {
-			"success": False,
-			"markdown": raw_response,
-			"error": "Could not parse structured response"
-		}
+		return {"success": False, "markdown": raw_response, "error": "Could not parse structured response"}
 
 
 def get_api_key(settings, provider):

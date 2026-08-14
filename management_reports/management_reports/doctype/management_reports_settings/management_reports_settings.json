@@ -6,6 +6,12 @@
  "field_order": [
   "access_control_section",
   "allowed_users",
+  "data_source_section",
+  "branch_dimension_fieldname",
+  "branch_dimension_doctype",
+  "branch_label",
+  "column_break_ds1",
+  "cogs_source",
   "ai_settings_section",
   "ai_provider",
   "enable_ai_analysis",
@@ -33,6 +39,45 @@
    "label": "Allowed Users",
    "options": "Management Reports User",
    "description": "Add users who should have access to management reports and dashboard"
+  },
+  {
+   "fieldname": "data_source_section",
+   "fieldtype": "Section Break",
+   "label": "Data Source",
+   "description": "How this site models a branch, and whether cost data is reliable here. Set once per site at deployment."
+  },
+  {
+   "fieldname": "branch_dimension_fieldname",
+   "fieldtype": "Data",
+   "label": "Branch Dimension Fieldname",
+   "default": "cost_center",
+   "description": "Link fieldname on Sales Invoice that identifies the branch. Defaults to cost_center. Must be an existing Link field — validated on save."
+  },
+  {
+   "fieldname": "branch_dimension_doctype",
+   "fieldtype": "Data",
+   "label": "Branch Dimension DocType",
+   "read_only": 1,
+   "description": "Derived from the fieldname above."
+  },
+  {
+   "fieldname": "branch_label",
+   "fieldtype": "Data",
+   "label": "Branch Label",
+   "default": "Branch",
+   "description": "What this site calls a branch — Branch, Outlet, Station, Site. Used as the column and filter label across all reports."
+  },
+  {
+   "fieldname": "column_break_ds1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cogs_source",
+   "fieldtype": "Select",
+   "label": "COGS Source",
+   "options": "Item Valuation\nNone",
+   "default": "Item Valuation",
+   "description": "Item Valuation uses Qty x Incoming Rate. Choose None on sites without perpetual inventory — COGS, Profit and Margin columns are then hidden rather than reported as zero cost."
   },
   {
    "fieldname": "ai_settings_section",
