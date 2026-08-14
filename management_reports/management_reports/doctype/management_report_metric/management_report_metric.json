@@ -1,0 +1,95 @@
+{
+ "actions": [],
+ "creation": "2026-08-14 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "label",
+  "document_type",
+  "function",
+  "value_field",
+  "date_field",
+  "group_by_field",
+  "filters_json"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled",
+   "columns": 1
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Label",
+   "reqd": 1,
+   "columns": 2,
+   "description": "Shown in the report email, e.g. Complimentary Meals."
+  },
+  {
+   "fieldname": "document_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "DocType",
+   "options": "DocType",
+   "reqd": 1,
+   "columns": 2
+  },
+  {
+   "default": "Count",
+   "fieldname": "function",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Function",
+   "options": "Count\nSum",
+   "reqd": 1,
+   "columns": 1
+  },
+  {
+   "fieldname": "value_field",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Value Field",
+   "columns": 2,
+   "depends_on": "eval:doc.function=='Sum'",
+   "description": "Numeric fieldname to sum, e.g. total_value. Required for Sum."
+  },
+  {
+   "fieldname": "date_field",
+   "fieldtype": "Data",
+   "label": "Date Field",
+   "columns": 2,
+   "description": "Date or Datetime fieldname used to place a record in the reporting period. Defaults to creation."
+  },
+  {
+   "fieldname": "group_by_field",
+   "fieldtype": "Data",
+   "label": "Break Down By",
+   "description": "Optional fieldname to split the number by, e.g. reason."
+  },
+  {
+   "fieldname": "filters_json",
+   "fieldtype": "Code",
+   "label": "Filters (JSON)",
+   "options": "JSON",
+   "description": "Optional JSON object of extra equality filters, e.g. {\"status\": \"Approved\"}."
+  }
+ ],
+ "idx": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Management Reports",
+ "name": "Management Report Metric",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

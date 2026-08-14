@@ -230,7 +230,54 @@ def render_table(columns, rows) -> str:
 	)
 
 
-def render_email(company: str, frequency: str, period, sections: list) -> str:
+def render_metrics(metrics: list, currency: str) -> str:
+	"""Configuration-defined counters, each with an optional breakdown."""
+	if not metrics:
+		return ""
+
+	cells = []
+	for metric in metrics:
+		value = (
+			fmt_money(flt(metric["value"]), currency=currency)
+			if metric.get("is_currency")
+			else cstr(cint(metric["value"]))
+		)
+
+		breakdown = ""
+		if metric.get("breakdown"):
+			parts = [
+				escape_html(item["group"])
+				+ " "
+				+ (
+					fmt_money(flt(item["value"]), currency=currency)
+					if metric.get("is_currency")
+					else cstr(cint(item["value"]))
+				)
+				for item in metric["breakdown"]
+			]
+			breakdown = (
+				'<div style="font-size:11px;color:#6b7280;margin-top:3px">' + " · ".join(parts) + "</div>"
+			)
+
+		cells.append(
+			'<td style="padding:10px 14px;border:1px solid #e2e5e9;background:#f7f8f9;vertical-align:top">'
+			'<div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">'
+			+ escape_html(cstr(metric["label"]))
+			+ '</div><div style="font-size:17px;font-weight:600;color:#111827;margin-top:2px">'
+			+ escape_html(value)
+			+ "</div>"
+			+ breakdown
+			+ "</td>"
+		)
+
+	return (
+		'<h3 style="font-size:15px;color:#111827;margin:22px 0 8px">' + _("Other Counters") + "</h3>"
+		'<table role="presentation" cellspacing="0" cellpadding="0" '
+		'style="border-collapse:collapse;margin:0 0 14px"><tr>' + "".join(cells) + "</tr></table>"
+	)
+
+
+def render_email(company: str, frequency: str, period, sections: list, metrics: list | None = None) -> str:
 	blocks = []
 	for section in sections:
 		blocks.append(
@@ -255,6 +302,7 @@ def render_email(company: str, frequency: str, period, sections: list) -> str:
 		+ escape_html(cstr(period.label))
 		+ "</p>"
 		+ "".join(blocks)
+		+ render_metrics(metrics or [], get_currency(company))
 		+ '<p style="color:#9ca3af;font-size:11px;margin:24px 0 0;border-top:1px solid #e2e5e9;'
 		'padding-top:10px">' + _("Sent automatically by Management Reports.") + "</p></div>"
 	)
@@ -323,15 +371,20 @@ def build_digest(settings, frequency: str, as_on=None) -> frappe._dict:
 	if not sections:
 		frappe.throw(_("Every selected report failed to run. See the Error Log."))
 
+	from management_reports.utils.metrics import evaluate_metrics
+
+	metrics = evaluate_metrics(company, period.from_date, period.to_date)
+
 	return frappe._dict(
 		{
 			"company": company,
 			"currency": get_currency(company),
 			"period": period,
 			"sections": sections,
+			"metrics": metrics,
 			"failed": failed,
 			"subject": company + " - " + _(frequency) + " " + _("Report") + " - " + cstr(period.label),
-			"message": render_email(company, frequency, period, sections),
+			"message": render_email(company, frequency, period, sections, metrics),
 		}
 	)
 

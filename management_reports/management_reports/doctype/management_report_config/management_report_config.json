@@ -14,7 +14,9 @@
   "column_break_2",
   "margin_floor",
   "branch_section",
-  "branch_map"
+  "branch_map",
+  "metrics_section",
+  "metrics"
  ],
  "fields": [
   {
@@ -79,6 +81,18 @@
    "label": "Branch Map",
    "options": "Management Report Branch Map",
    "description": "Per-branch owner, display name and target. Branches not listed here still appear in reports; this only adds naming and targets."
+  },
+  {
+   "fieldname": "metrics_section",
+   "fieldtype": "Section Break",
+   "label": "Extra Counters",
+   "description": "Numbers from any DocType to include in the report email — complimentary meals, wastage, voided tickets. Defined here rather than in code so this app stays the same on every site."
+  },
+  {
+   "fieldname": "metrics",
+   "fieldtype": "Table",
+   "label": "Counters",
+   "options": "Management Report Metric"
   }
  ],
  "idx": 0,
