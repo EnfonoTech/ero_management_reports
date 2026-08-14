@@ -18,12 +18,20 @@
   "column_break_ai1",
   "anthropic_api_key",
   "openai_api_key",
+  "deepseek_api_key",
   "column_break_1",
   "ai_model",
   "email_settings_section",
   "auto_email_enabled",
   "email_frequency",
+  "email_hour",
   "column_break_2",
+  "email_company",
+  "email_format",
+  "email_reports_section",
+  "email_reports",
+  "recipients_section",
+  "recipients",
   "email_recipients"
  ],
  "fields": [
@@ -88,7 +96,7 @@
    "fieldname": "ai_provider",
    "fieldtype": "Select",
    "label": "AI Provider",
-   "options": "Anthropic\nOpenAI",
+   "options": "Anthropic\nOpenAI\nDeepSeek",
    "default": "Anthropic",
    "reqd": 0
   },
@@ -117,6 +125,13 @@
    "depends_on": "eval:doc.ai_provider=='OpenAI'"
   },
   {
+   "fieldname": "deepseek_api_key",
+   "fieldtype": "Password",
+   "label": "DeepSeek API Key",
+   "description": "Your DeepSeek API key. Get one at platform.deepseek.com",
+   "depends_on": "eval:doc.ai_provider=='DeepSeek'"
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
@@ -124,13 +139,15 @@
    "fieldname": "ai_model",
    "fieldtype": "Select",
    "label": "AI Model",
-   "options": "claude-sonnet-4-20250514\nclaude-3-5-haiku-20241022\ngpt-4o\ngpt-4o-mini\ngpt-4-turbo",
-   "default": "claude-sonnet-4-20250514"
+   "options": "claude-sonnet-4-20250514\nclaude-3-5-haiku-20241022\ngpt-4o\ngpt-4o-mini\ngpt-4-turbo\ndeepseek-chat\ndeepseek-reasoner",
+   "default": "claude-sonnet-4-20250514",
+   "description": "Options are filtered to the selected provider. A model from another provider falls back to that provider's default."
   },
   {
    "fieldname": "email_settings_section",
    "fieldtype": "Section Break",
-   "label": "Auto Email Settings"
+   "label": "Automated Reports",
+   "description": "Scheduled report email. Use Send Test Email to verify delivery before switching this on."
   },
   {
    "fieldname": "auto_email_enabled",
@@ -142,6 +159,15 @@
    "fieldtype": "Select",
    "label": "Email Frequency",
    "options": "\nDaily\nWeekly\nMonthly",
+   "default": "Daily",
+   "depends_on": "auto_email_enabled"
+  },
+  {
+   "fieldname": "email_hour",
+   "fieldtype": "Int",
+   "label": "Send At Hour",
+   "default": "7",
+   "description": "0-23 in the site timezone. Daily sends cover yesterday, so a morning hour is usual.",
    "depends_on": "auto_email_enabled"
   },
   {
@@ -149,11 +175,53 @@
    "fieldtype": "Column Break"
   },
   {
+   "fieldname": "email_company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "description": "Leave blank to use the site default company.",
+   "depends_on": "auto_email_enabled"
+  },
+  {
+   "fieldname": "email_format",
+   "fieldtype": "Select",
+   "label": "Email Format",
+   "options": "HTML Summary\nXLSX Attachment\nBoth",
+   "default": "HTML Summary",
+   "depends_on": "auto_email_enabled"
+  },
+  {
+   "fieldname": "email_reports_section",
+   "fieldtype": "Section Break",
+   "label": "Reports To Send",
+   "depends_on": "auto_email_enabled"
+  },
+  {
+   "fieldname": "email_reports",
+   "fieldtype": "Table MultiSelect",
+   "label": "Reports",
+   "options": "Management Report Selection",
+   "description": "Leave empty to send the frequency's default report — Daily Summary for daily, Monthly Summary for weekly and monthly."
+  },
+  {
+   "fieldname": "recipients_section",
+   "fieldtype": "Section Break",
+   "label": "Recipients"
+  },
+  {
+   "fieldname": "recipients",
+   "fieldtype": "Table",
+   "label": "Recipients",
+   "options": "Management Report Recipient",
+   "description": "One row per recipient. Pick a user to fill the email automatically, or type any address."
+  },
+  {
    "fieldname": "email_recipients",
    "fieldtype": "Small Text",
-   "label": "Email Recipients",
-   "description": "Comma-separated email addresses",
-   "depends_on": "auto_email_enabled"
+   "label": "Email Recipients (deprecated)",
+   "description": "Superseded by the Recipients table above. Kept so existing values can be migrated; will be removed.",
+   "read_only": 1,
+   "depends_on": "eval:doc.email_recipients"
   }
  ],
  "idx": 0,

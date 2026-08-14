@@ -2,9 +2,26 @@ import json
 
 import frappe
 from frappe import _
+from frappe.query_builder import Order
 from frappe.utils import add_months, getdate, nowdate
 
 from management_reports.management_reports.permissions import check_access
+from management_reports.utils.ai import (
+	CHAT_MAX_TOKENS,
+	CHAT_TIMEOUT,
+	call_ai,
+	get_api_key,
+	get_model,
+	get_provider,
+)
+from management_reports.utils.currency import get_currency
+from management_reports.utils.query import (
+	base_query,
+	cogs_expression,
+	invoice_count,
+	month_key_column,
+	rounded_sum,
+)
 
 
 @frappe.whitelist()
@@ -21,22 +38,18 @@ def get_ai_analysis(company=None):
 	if not settings or not settings.enable_ai_analysis:
 		return {"error": _("AI Analysis is disabled in Management Reports Settings")}
 
-	provider = settings.ai_provider or "Anthropic"
+	provider = get_provider(settings)
 	api_key = get_api_key(settings, provider)
 
 	if not api_key:
-		return {
-			"error": _(
-				"Please configure your {0} API key in Management Reports Settings. Go to: /app/management-reports-settings"
-			).format(provider)
-		}
+		return {"error": missing_key_message(provider)}
 
-	model = settings.ai_model or get_default_model(provider)
+	model = get_model(settings, provider)
 	data = gather_analysis_data(company)
 	prompt = build_analysis_prompt(data, company)
 
 	try:
-		raw_response = call_ai_api(provider, api_key, model, prompt)
+		raw_response = call_ai(provider, api_key, model, prompt=prompt)
 		result = parse_ai_response(raw_response, data)
 		return result
 	except Exception as e:
@@ -58,17 +71,15 @@ def chat_with_ai(company=None, message="", history="[]"):
 		return {"error": _("Please enter a message")}
 
 	settings = frappe.get_single("Management Reports Settings")
-	provider = settings.ai_provider or "Anthropic"
+	provider = get_provider(settings)
 	api_key = get_api_key(settings, provider)
 
 	if not api_key:
-		return {
-			"error": _("Please configure your {0} API key in Management Reports Settings.").format(provider)
-		}
+		return {"error": missing_key_message(provider)}
 
-	model = settings.ai_model or get_default_model(provider)
+	model = get_model(settings, provider)
 	data = gather_analysis_data(company)
-	currency = data.get("currency", "SAR")
+	currency = data.get("currency")
 
 	# Build system context
 	system_prompt = f"""You are a business analytics assistant for {company}. You have access to the following sales data:
@@ -115,99 +126,132 @@ IMPORTANT RESPONSE FORMAT:
 	messages.append({"role": "user", "content": message})
 
 	try:
-		response = call_ai_api_with_system(provider, api_key, model, system_prompt, messages)
+		response = call_ai(
+			provider,
+			api_key,
+			model,
+			system_prompt=system_prompt,
+			messages=messages,
+			max_tokens=CHAT_MAX_TOKENS,
+			timeout=CHAT_TIMEOUT,
+		)
 		return {"response": response}
 	except Exception as e:
 		frappe.log_error(f"AI Chat Error: {e!s}", "Management Reports AI Chat")
 		return {"error": str(e)}
 
 
+def missing_key_message(provider) -> str:
+	return (
+		_("No API key configured for this provider: ")
+		+ str(provider)
+		+ _(". Set one in Management Reports Settings.")
+	)
+
+
 def gather_analysis_data(company):
-	"""Gather last 3 months of sales data for analysis"""
+	"""Gather the last 3 months of sales data for analysis.
+
+	Goes through base_query like every report, so the branch scope applies here
+	too — otherwise a branch manager could ask the chat for numbers the reports
+	deliberately hide from them.
+	"""
 	today = getdate(nowdate())
 	three_months_ago = add_months(today, -3)
-	currency = frappe.get_cached_value("Company", company, "default_currency") or "SAR"
-
-	monthly_branch = frappe.db.sql(
-		"""
-		SELECT
-			DATE_FORMAT(si.posting_date, '%%Y-%%m') AS month,
-			si.cost_center AS branch,
-			COUNT(DISTINCT si.name) AS invoices,
-			ROUND(SUM(sii.amount), 2) AS revenue,
-			ROUND(SUM(sii.qty * sii.incoming_rate), 2) AS cogs
-		FROM `tabSales Invoice Item` sii
-		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
-		WHERE si.docstatus = 1 AND si.company = %(company)s
-			AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
-		GROUP BY DATE_FORMAT(si.posting_date, '%%Y-%%m'), si.cost_center
-		ORDER BY month, si.cost_center
-	""",
-		{"company": company, "from_date": three_months_ago, "to_date": today},
-		as_dict=1,
-	)
-
-	top_items = frappe.db.sql(
-		"""
-		SELECT sii.item_name,
-			ROUND(SUM(sii.amount), 2) AS revenue,
-			ROUND(SUM(sii.qty), 2) AS qty,
-			ROUND(SUM(sii.qty * sii.incoming_rate), 2) AS cogs
-		FROM `tabSales Invoice Item` sii
-		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
-		WHERE si.docstatus = 1 AND si.company = %(company)s
-			AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
-		GROUP BY sii.item_code, sii.item_name
-		ORDER BY SUM(sii.amount) DESC LIMIT 10
-	""",
-		{"company": company, "from_date": three_months_ago, "to_date": today},
-		as_dict=1,
-	)
-
-	top_customers = frappe.db.sql(
-		"""
-		SELECT si.customer_name, COUNT(si.name) AS invoices,
-			ROUND(SUM(si.grand_total), 2) AS revenue
-		FROM `tabSales Invoice` si
-		WHERE si.docstatus = 1 AND si.company = %(company)s
-			AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
-		GROUP BY si.customer, si.customer_name
-		ORDER BY SUM(si.grand_total) DESC LIMIT 10
-	""",
-		{"company": company, "from_date": three_months_ago, "to_date": today},
-		as_dict=1,
-	)
-
-	negative_margin = frappe.db.sql(
-		"""
-		SELECT sii.item_name,
-			ROUND(SUM(sii.amount), 2) AS revenue,
-			ROUND(SUM(sii.qty * sii.incoming_rate), 2) AS cogs
-		FROM `tabSales Invoice Item` sii
-		INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
-		WHERE si.docstatus = 1 AND si.company = %(company)s
-			AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
-		GROUP BY sii.item_code, sii.item_name
-		HAVING SUM(sii.amount) < SUM(sii.qty * sii.incoming_rate)
-		ORDER BY (SUM(sii.amount) - SUM(sii.qty * sii.incoming_rate)) ASC LIMIT 10
-	""",
-		{"company": company, "from_date": three_months_ago, "to_date": today},
-		as_dict=1,
-	)
+	filters = {"company": company, "from_date": three_months_ago, "to_date": today}
 
 	return {
 		"company": company,
-		"currency": currency,
+		"currency": get_currency(company),
 		"period": f"{three_months_ago} to {today}",
-		"monthly_branch": [dict(r) for r in monthly_branch],
-		"top_items": [dict(r) for r in top_items],
-		"top_customers": [dict(r) for r in top_customers],
-		"negative_margin_items": [dict(r) for r in negative_margin],
+		"monthly_branch": get_monthly_branch(filters),
+		"top_items": get_top_items(filters),
+		"top_customers": get_top_customers(filters),
+		"negative_margin_items": get_negative_margin_items(filters),
 	}
 
 
+def get_monthly_branch(filters) -> list:
+	ctx = base_query(filters)
+	month_key = month_key_column(ctx.SI)
+	selects = [
+		month_key.as_("month"),
+		ctx.branch_column.as_("branch"),
+		invoice_count(ctx.SI).as_("invoices"),
+		rounded_sum(ctx.SII.amount).as_("revenue"),
+	]
+
+	cogs = cogs_expression(ctx.SII)
+	if cogs is not None:
+		selects.append(cogs.as_("cogs"))
+
+	return (
+		ctx.query.select(*selects)
+		.groupby(month_key, ctx.branch_column)
+		.orderby(month_key, ctx.branch_column)
+		.run(as_dict=True)
+	)
+
+
+def get_top_items(filters, limit: int = 10) -> list:
+	ctx = base_query(filters)
+	selects = [
+		ctx.SII.item_name,
+		rounded_sum(ctx.SII.amount).as_("revenue"),
+		rounded_sum(ctx.SII.qty).as_("qty"),
+	]
+
+	cogs = cogs_expression(ctx.SII)
+	if cogs is not None:
+		selects.append(cogs.as_("cogs"))
+
+	return (
+		ctx.query.select(*selects)
+		.groupby(ctx.SII.item_code, ctx.SII.item_name)
+		.orderby(rounded_sum(ctx.SII.amount), order=Order.desc)
+		.limit(limit)
+		.run(as_dict=True)
+	)
+
+
+def get_top_customers(filters, limit: int = 10) -> list:
+	ctx = base_query(filters, with_items=False)
+
+	return (
+		ctx.query.select(
+			ctx.SI.customer_name,
+			invoice_count(ctx.SI).as_("invoices"),
+			rounded_sum(ctx.SI.grand_total).as_("revenue"),
+		)
+		.groupby(ctx.SI.customer, ctx.SI.customer_name)
+		.orderby(rounded_sum(ctx.SI.grand_total), order=Order.desc)
+		.limit(limit)
+		.run(as_dict=True)
+	)
+
+
+def get_negative_margin_items(filters, limit: int = 10) -> list:
+	"""Items sold below cost. Empty when the site has no trustworthy COGS."""
+	ctx = base_query(filters)
+	cogs = cogs_expression(ctx.SII)
+
+	if cogs is None:
+		return []
+
+	revenue = rounded_sum(ctx.SII.amount)
+
+	return (
+		ctx.query.select(ctx.SII.item_name, revenue.as_("revenue"), cogs.as_("cogs"))
+		.groupby(ctx.SII.item_code, ctx.SII.item_name)
+		.having(revenue < cogs)
+		.orderby(revenue - cogs)
+		.limit(limit)
+		.run(as_dict=True)
+	)
+
+
 def build_analysis_prompt(data, company):
-	currency = data.get("currency", "SAR")
+	currency = data.get("currency")
 	return f"""Analyze this sales data for {company} and respond with EXACTLY this JSON format (no other text):
 
 ```json
@@ -301,138 +345,3 @@ def parse_ai_response(raw_response, data):
 	except (json.JSONDecodeError, IndexError):
 		# Fallback: return as markdown
 		return {"success": False, "markdown": raw_response, "error": "Could not parse structured response"}
-
-
-def get_api_key(settings, provider):
-	"""Get API key based on selected provider"""
-	if provider == "OpenAI":
-		return settings.get_password("openai_api_key") if settings else None
-	return settings.get_password("anthropic_api_key") if settings else None
-
-
-def get_default_model(provider):
-	"""Get default model for a provider"""
-	if provider == "OpenAI":
-		return "gpt-4o"
-	return "claude-sonnet-4-20250514"
-
-
-def call_ai_api(provider, api_key, model, prompt):
-	"""Route single-prompt call to the correct provider"""
-	if provider == "OpenAI":
-		return call_openai_api(api_key, model, prompt)
-	return call_claude_api(api_key, model, prompt)
-
-
-def call_ai_api_with_system(provider, api_key, model, system_prompt, messages):
-	"""Route system-prompt call to the correct provider"""
-	if provider == "OpenAI":
-		return call_openai_api_with_system(api_key, model, system_prompt, messages)
-	return call_claude_api_with_system(api_key, model, system_prompt, messages)
-
-
-def call_claude_api(api_key, model, prompt):
-	"""Call Claude API with a single prompt"""
-	import requests
-
-	response = requests.post(
-		"https://api.anthropic.com/v1/messages",
-		headers={
-			"x-api-key": api_key,
-			"anthropic-version": "2023-06-01",
-			"content-type": "application/json",
-		},
-		json={
-			"model": model,
-			"max_tokens": 4000,
-			"messages": [{"role": "user", "content": prompt}],
-		},
-		timeout=90,
-	)
-
-	if response.status_code != 200:
-		error_msg = response.json().get("error", {}).get("message", response.text)
-		frappe.throw(f"Claude API error: {error_msg}")
-
-	return response.json()["content"][0]["text"]
-
-
-def call_claude_api_with_system(api_key, model, system_prompt, messages):
-	"""Call Claude API with system prompt and message history"""
-	import requests
-
-	response = requests.post(
-		"https://api.anthropic.com/v1/messages",
-		headers={
-			"x-api-key": api_key,
-			"anthropic-version": "2023-06-01",
-			"content-type": "application/json",
-		},
-		json={
-			"model": model,
-			"max_tokens": 2000,
-			"system": system_prompt,
-			"messages": messages,
-		},
-		timeout=60,
-	)
-
-	if response.status_code != 200:
-		error_msg = response.json().get("error", {}).get("message", response.text)
-		frappe.throw(f"Claude API error: {error_msg}")
-
-	return response.json()["content"][0]["text"]
-
-
-def call_openai_api(api_key, model, prompt):
-	"""Call OpenAI API with a single prompt"""
-	import requests
-
-	response = requests.post(
-		"https://api.openai.com/v1/chat/completions",
-		headers={
-			"Authorization": f"Bearer {api_key}",
-			"Content-Type": "application/json",
-		},
-		json={
-			"model": model,
-			"max_tokens": 4000,
-			"messages": [{"role": "user", "content": prompt}],
-		},
-		timeout=90,
-	)
-
-	if response.status_code != 200:
-		error_msg = response.json().get("error", {}).get("message", response.text)
-		frappe.throw(f"OpenAI API error: {error_msg}")
-
-	return response.json()["choices"][0]["message"]["content"]
-
-
-def call_openai_api_with_system(api_key, model, system_prompt, messages):
-	"""Call OpenAI API with system prompt and message history"""
-	import requests
-
-	openai_messages = [{"role": "system", "content": system_prompt}]
-	for msg in messages:
-		openai_messages.append({"role": msg["role"], "content": msg["content"]})
-
-	response = requests.post(
-		"https://api.openai.com/v1/chat/completions",
-		headers={
-			"Authorization": f"Bearer {api_key}",
-			"Content-Type": "application/json",
-		},
-		json={
-			"model": model,
-			"max_tokens": 2000,
-			"messages": openai_messages,
-		},
-		timeout=60,
-	)
-
-	if response.status_code != 200:
-		error_msg = response.json().get("error", {}).get("message", response.text)
-		frappe.throw(f"OpenAI API error: {error_msg}")
-
-	return response.json()["choices"][0]["message"]["content"]
