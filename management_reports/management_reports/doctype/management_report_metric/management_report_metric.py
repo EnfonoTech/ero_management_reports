@@ -32,7 +32,12 @@ class ManagementReportMetric(Document):
 				title=_("Unknown DocType"),
 			)
 
-	def meta(self):
+	def target_meta(self):
+		"""Meta of the DocType being counted.
+
+		Deliberately not named `meta` — that shadows Document.meta, which Frappe
+		itself calls during __init__, and the shadow breaks every save.
+		"""
 		return frappe.get_meta(self.document_type)
 
 	def validate_function(self):
@@ -46,7 +51,7 @@ class ManagementReportMetric(Document):
 				title=_("Value Field Required"),
 			)
 
-		field = self.meta().get_field(self.value_field)
+		field = self.target_meta().get_field(self.value_field)
 		if not field or field.fieldtype not in NUMERIC_FIELDTYPES:
 			frappe.throw(
 				_("Value Field must be a numeric field on the selected DocType: ")
@@ -59,7 +64,7 @@ class ManagementReportMetric(Document):
 		if not self.date_field:
 			return
 
-		field = self.meta().get_field(self.date_field)
+		field = self.target_meta().get_field(self.date_field)
 		if not field or field.fieldtype not in DATE_FIELDTYPES:
 			frappe.throw(
 				_("Date Field must be a Date or Datetime field on the selected DocType: ")
@@ -71,7 +76,7 @@ class ManagementReportMetric(Document):
 		if not self.group_by_field:
 			return
 
-		if not self.meta().get_field(self.group_by_field):
+		if not self.target_meta().get_field(self.group_by_field):
 			frappe.throw(
 				_("Break Down By must be a field on the selected DocType: ")
 				+ frappe.bold(cstr(self.group_by_field)),
@@ -95,7 +100,7 @@ class ManagementReportMetric(Document):
 				title=_("Invalid Filters"),
 			)
 
-		meta = self.meta()
+		meta = self.target_meta()
 		for fieldname in filters:
 			if fieldname in ("name", "owner", "docstatus"):
 				continue
