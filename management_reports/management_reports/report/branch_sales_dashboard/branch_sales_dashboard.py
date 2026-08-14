@@ -1,7 +1,9 @@
 from frappe import _
 from frappe.query_builder import Order
+from frappe.utils import flt
 
 from management_reports.management_reports.permissions import check_access
+from management_reports.utils.config import get_branch_display_names, get_branch_targets
 from management_reports.utils.currency import get_company_abbr, get_currency, strip_abbr
 from management_reports.utils.dimensions import get_branch_dimension
 from management_reports.utils.query import (
@@ -52,7 +54,30 @@ def get_columns(filters):
 		},
 	]
 
-	return add_profit_columns(columns, currency, profit_label=currency_label("Gross Profit", currency))
+	columns = add_profit_columns(columns, currency, profit_label=currency_label("Gross Profit", currency))
+
+	# Target columns appear only once somebody has configured targets, so a site
+	# with no Management Report Config sees exactly the report it saw before.
+	if get_branch_targets((filters or {}).get("company")):
+		columns.append(
+			{
+				"label": currency_label("Target", currency),
+				"fieldname": "target",
+				"fieldtype": "Currency",
+				"options": "currency",
+				"width": 140,
+			}
+		)
+		columns.append(
+			{
+				"label": _("Achieved %"),
+				"fieldname": "achieved",
+				"fieldtype": "Percent",
+				"width": 110,
+			}
+		)
+
+	return columns
 
 
 def get_data(filters):
@@ -77,10 +102,17 @@ def get_data(filters):
 		.run(as_dict=True)
 	)
 
+	targets = get_branch_targets((filters or {}).get("company"))
+
 	for row in data:
 		row["currency"] = currency
 		if cogs is not None:
 			set_derived_profit(row)
+
+		target = flt(targets.get(row.get("branch")))
+		if target:
+			row["target"] = target
+			row["achieved"] = (flt(row.get("revenue")) / target) * 100
 
 	return data
 
@@ -108,9 +140,12 @@ def get_chart(filters):
 	branches = sorted({row["branch"] for row in monthly if row["branch"]})
 	lookup = {(row["branch"], row["month_key"]): row["revenue"] for row in monthly}
 
+	# A configured display name wins; otherwise fall back to stripping the
+	# company abbreviation ERPNext appends to Cost Center names.
+	names = get_branch_display_names((filters or {}).get("company"))
 	datasets = [
 		{
-			"name": strip_abbr(branch, abbr),
+			"name": names.get(branch) or strip_abbr(branch, abbr),
 			"values": [lookup.get((branch, month), 0) for month in months],
 		}
 		for branch in branches

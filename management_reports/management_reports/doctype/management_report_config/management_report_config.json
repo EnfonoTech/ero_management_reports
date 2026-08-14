@@ -1,0 +1,115 @@
+{
+ "actions": [],
+ "autoname": "field:company",
+ "creation": "2026-08-14 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "disabled",
+  "column_break_1",
+  "currency",
+  "targets_section",
+  "monthly_revenue_target",
+  "column_break_2",
+  "margin_floor",
+  "branch_section",
+  "branch_map"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled",
+   "description": "Keep the configuration but stop applying it."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "read_only": 1,
+   "description": "Derived from the company."
+  },
+  {
+   "fieldname": "targets_section",
+   "fieldtype": "Section Break",
+   "label": "Company Targets",
+   "description": "Leave blank to omit target columns from reports entirely."
+  },
+  {
+   "fieldname": "monthly_revenue_target",
+   "fieldtype": "Currency",
+   "label": "Monthly Revenue Target",
+   "options": "currency"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "margin_floor",
+   "fieldtype": "Percent",
+   "label": "Margin Floor %",
+   "description": "Margin below this is flagged. Ignored on sites with COGS Source set to None, where margin is not reported at all."
+  },
+  {
+   "fieldname": "branch_section",
+   "fieldtype": "Section Break",
+   "label": "Branches"
+  },
+  {
+   "fieldname": "branch_map",
+   "fieldtype": "Table",
+   "label": "Branch Map",
+   "options": "Management Report Branch Map",
+   "description": "Per-branch owner, display name and target. Branches not listed here still appear in reports; this only adds naming and targets."
+  }
+ ],
+ "idx": 0,
+ "links": [],
+ "modified": "2026-08-14 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Management Reports",
+ "name": "Management Report Config",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "company",
+ "track_changes": 1
+}
