@@ -22,12 +22,13 @@
    "columns": 1
   },
   {
+   "default": "Cost Center",
    "fieldname": "branch_doctype",
    "fieldtype": "Data",
    "label": "Branch DocType",
    "read_only": 1,
    "hidden": 1,
-   "description": "Set from Management Reports Settings. Drives the Branch link below."
+   "description": "Drives the Branch link below. Defaults to Cost Center because Document.insert() validates Dynamic Links before any controller hook runs; the parent's before_validate then corrects it for sites using another dimension."
   },
   {
    "fieldname": "branch",

@@ -8,6 +8,15 @@ from management_reports.utils.dimensions import get_branch_dimension
 
 
 class ManagementReportConfig(Document):
+	def before_validate(self):
+		# Must also run here, not only in validate: Document.insert() calls
+		# _validate_links() before any controller hook, so a Dynamic Link whose
+		# options field is filled in validate() fails with
+		# "Branch DocType must be set first" the first time a row is saved.
+		# before_validate does not fix insert either — the child field carries a
+		# default of Cost Center for that path — but it keeps updates correct.
+		self.apply_branch_dimension()
+
 	def validate(self):
 		self.currency = get_currency(self.company)
 		self.apply_branch_dimension()

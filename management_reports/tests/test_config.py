@@ -217,3 +217,71 @@ class TestBranchMapSchema(FrappeTestCase):
 		self.assertEqual(schema["autoname"], "field:company")
 		self.assertEqual(fields["company"]["unique"], 1)
 		self.assertEqual(fields["company"]["reqd"], 1)
+
+
+class TestConfigSavesWithBranchRows(FrappeTestCase):
+	"""Document.insert() runs _validate_links() before any controller hook, so a
+	Dynamic Link whose options field is only filled in validate() throws
+	'Branch DocType must be set first' the first time a row is saved. The child
+	field therefore carries a default, and the form JS stamps it on row add.
+	"""
+
+	def test_branch_doctype_has_a_default_so_insert_can_validate_the_link(self):
+		schema = load_json("doctype", "management_report_branch_map", "management_report_branch_map.json")
+		fields = {f["fieldname"]: f for f in schema["fields"]}
+
+		self.assertEqual(fields["branch_doctype"].get("default"), "Cost Center")
+
+	def test_config_round_trips_with_a_branch_row(self):
+		# Needs the app actually installed on this site; the DocType controller
+		# cannot be resolved otherwise.
+		if not frappe.db.exists("DocType", "Management Report Config"):
+			self.skipTest("management_reports not installed on this site")
+
+		company = frappe.db.get_value("Company", {}, "name")
+		branch = frappe.db.get_value("Cost Center", {"is_group": 0, "company": company}, "name")
+		if not company or not branch:
+			self.skipTest("site has no company or leaf cost center")
+
+		name = "_MR Test " + company
+		if frappe.db.exists("Management Report Config", {"company": company}):
+			self.skipTest("a real config already exists for this company")
+
+		doc = frappe.new_doc("Management Report Config")
+		doc.company = company
+		# Deliberately NOT setting branch_doctype — the default plus the
+		# controller must make this work, because that is what the desk does.
+		doc.append("branch_map", {"enabled": 1, "branch": branch, "monthly_target": 1000})
+		doc.flags.ignore_permissions = True
+		doc.insert()
+		self.addCleanup(lambda: frappe.delete_doc("Management Report Config", doc.name, force=True))
+
+		doc.reload()
+		self.assertEqual(doc.branch_map[0].branch_doctype, "Cost Center")
+		self.assertEqual(doc.branch_map[0].branch, branch)
+		self.assertTrue(doc.branch_map[0].display_name)
+
+		# Saving again must stay valid.
+		doc.branch_map[0].monthly_target = 2000
+		doc.save()
+		self.assertEqual(get_branch_targets(company).get(branch), 2000.0)
+		frappe._dict(name=name)
+
+	def test_form_script_stamps_branch_doctype_on_row_add(self):
+		"""The desk path relies on this JS; losing it reintroduces the bug."""
+		import management_reports
+
+		root = os.path.dirname(os.path.dirname(os.path.abspath(management_reports.__file__)))
+		path = os.path.join(
+			root,
+			"management_reports",
+			"management_reports",
+			"doctype",
+			"management_report_config",
+			"management_report_config.js",
+		)
+		with open(path) as handle:
+			source = handle.read()
+
+		self.assertIn("branch_map_add", source)
+		self.assertIn("branch_doctype", source)
