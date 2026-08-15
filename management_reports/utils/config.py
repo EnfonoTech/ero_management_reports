@@ -6,7 +6,7 @@ through here so a site with no Config behaves exactly as before.
 """
 
 import frappe
-from frappe.utils import flt
+from frappe.utils import add_days, flt, get_first_day, get_last_day, getdate
 
 CONFIG_DOCTYPE = "Management Report Config"
 
@@ -67,3 +67,40 @@ def get_margin_floor(company: str | None) -> float:
 	config = get_config(company)
 
 	return flt(config.margin_floor) if config else 0.0
+
+
+def period_months(from_date, to_date) -> float:
+	"""Fractional calendar months covered by a date range.
+
+	Targets are entered per month but reports are run over arbitrary ranges, so a
+	raw comparison reports 900% for a nine-month filter and 3% for a single day.
+	Each overlapped month contributes the share of its own days that the range
+	covers, which makes a full month exactly 1.0 and February behave like
+	February rather than like a 30-day approximation.
+	"""
+	# Checked before getdate, which turns None into today — that would silently
+	# treat "no range given" as a single day and inflate every Achieved %.
+	if not from_date or not to_date:
+		return 0.0
+
+	start, end = getdate(from_date), getdate(to_date)
+	if end < start:
+		return 0.0
+
+	months = 0.0
+	cursor = get_first_day(start)
+	while cursor <= end:
+		month_end = get_last_day(cursor)
+		covered_from = max(cursor, start)
+		covered_to = min(month_end, end)
+		days_in_month = (month_end - cursor).days + 1
+		covered_days = (covered_to - covered_from).days + 1
+		months += covered_days / days_in_month
+		cursor = get_first_day(add_days(month_end, 1))
+
+	return round(months, 6)
+
+
+def prorate_target(monthly_target, from_date, to_date) -> float:
+	"""Scale a monthly target to the filtered period."""
+	return flt(monthly_target) * period_months(from_date, to_date)

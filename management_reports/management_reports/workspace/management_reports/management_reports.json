@@ -1,11 +1,11 @@
 {
  "charts": [
   {
-   "chart_name": "MR Monthly Revenue",
+   "chart_name": "Monthly Revenue",
    "label": "Monthly Revenue"
   }
  ],
- "content": "[{\"id\":\"mrHeader1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>This Month</b></span>\",\"col\":12}},{\"id\":\"mrCard1\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"MR MTD Revenue\",\"col\":4}},{\"id\":\"mrCard2\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"MR MTD Invoices\",\"col\":4}},{\"id\":\"mrSpacer1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"mrChart1\",\"type\":\"chart\",\"data\":{\"chart_name\":\"MR Monthly Revenue\",\"col\":12}},{\"id\":\"mrSpacer2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"mrHeader2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"mrShort1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Analysis Dashboard\",\"col\":4}},{\"id\":\"mrShort2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Branch Sales Dashboard\",\"col\":4}},{\"id\":\"mrShort3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Settings\",\"col\":4}},{\"id\":\"mrSpacer3\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"mrHeader3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports</b></span>\",\"col\":12}},{\"id\":\"mrCardA\",\"type\":\"card\",\"data\":{\"card_name\":\"Branch Reports\",\"col\":4}},{\"id\":\"mrCardB\",\"type\":\"card\",\"data\":{\"card_name\":\"Consolidated Reports\",\"col\":4}},{\"id\":\"mrCardC\",\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}}]",
+ "content": "[{\"id\":\"mrHeader1\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>This Month</b></span>\",\"col\":12}},{\"id\":\"mrCard1\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Revenue This Month\",\"col\":4}},{\"id\":\"mrCard2\",\"type\":\"number_card\",\"data\":{\"number_card_name\":\"Invoices This Month\",\"col\":4}},{\"id\":\"mrSpacer1\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"mrChart1\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Monthly Revenue\",\"col\":12}},{\"id\":\"mrSpacer2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"mrHeader2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Quick Access</b></span>\",\"col\":12}},{\"id\":\"mrShort1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"AI Analysis Dashboard\",\"col\":4}},{\"id\":\"mrShort2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Branch Sales Dashboard\",\"col\":4}},{\"id\":\"mrShort3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Settings\",\"col\":4}},{\"id\":\"mrSpacer3\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"mrHeader3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports</b></span>\",\"col\":12}},{\"id\":\"mrCardA\",\"type\":\"card\",\"data\":{\"card_name\":\"Branch Reports\",\"col\":4}},{\"id\":\"mrCardB\",\"type\":\"card\",\"data\":{\"card_name\":\"Consolidated Reports\",\"col\":4}},{\"id\":\"mrCardC\",\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}}]",
  "creation": "2026-08-14 00:00:00.000000",
  "docstatus": 0,
  "doctype": "Workspace",
@@ -143,11 +143,11 @@
  "number_cards": [
   {
    "label": "Revenue This Month",
-   "number_card_name": "MR MTD Revenue"
+   "number_card_name": "Revenue This Month"
   },
   {
    "label": "Invoices This Month",
-   "number_card_name": "MR MTD Invoices"
+   "number_card_name": "Invoices This Month"
   }
  ],
  "owner": "Administrator",

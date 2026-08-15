@@ -11,6 +11,8 @@ from management_reports.utils.config import (
 	get_company_target,
 	get_config,
 	get_margin_floor,
+	period_months,
+	prorate_target,
 )
 
 
@@ -285,3 +287,96 @@ class TestConfigSavesWithBranchRows(FrappeTestCase):
 
 		self.assertIn("branch_map_add", source)
 		self.assertIn("branch_doctype", source)
+
+
+class TestTargetProRating(FrappeTestCase):
+	"""Targets are entered per month but reports run over arbitrary ranges. Without
+	pro-rating, a 12-month filter reported ~1200% achieved and a single day ~3%."""
+
+	def test_a_full_calendar_month_is_exactly_one(self):
+		self.assertEqual(period_months("2026-04-01", "2026-04-30"), 1.0)
+		self.assertEqual(period_months("2026-02-01", "2026-02-28"), 1.0)
+		self.assertEqual(period_months("2026-12-01", "2026-12-31"), 1.0)
+
+	def test_whole_quarters_and_years(self):
+		self.assertEqual(period_months("2026-01-01", "2026-03-31"), 3.0)
+		self.assertEqual(period_months("2026-01-01", "2026-12-31"), 12.0)
+
+	def test_partial_month_is_a_fraction_of_that_month(self):
+		# 15 of April's 30 days.
+		self.assertAlmostEqual(period_months("2026-04-16", "2026-04-30"), 0.5, places=4)
+		# February is measured against its own length, not a 30-day average.
+		self.assertAlmostEqual(period_months("2026-02-01", "2026-02-14"), 14 / 28, places=4)
+
+	def test_a_single_day_is_one_days_worth(self):
+		self.assertAlmostEqual(period_months("2026-04-10", "2026-04-10"), 1 / 30, places=5)
+
+	def test_ranges_spanning_a_month_boundary(self):
+		# Last 5 days of April plus first 5 of May.
+		expected = 5 / 30 + 5 / 31
+		self.assertAlmostEqual(period_months("2026-04-26", "2026-05-05"), expected, places=4)
+
+	def test_invalid_ranges_yield_zero_rather_than_throwing(self):
+		self.assertEqual(period_months("2026-04-30", "2026-04-01"), 0.0)
+		self.assertEqual(period_months(None, None), 0.0)
+
+	def test_prorate_scales_the_monthly_figure(self):
+		self.assertEqual(prorate_target(90000, "2026-04-01", "2026-04-30"), 90000.0)
+		self.assertEqual(prorate_target(90000, "2026-01-01", "2026-03-31"), 270000.0)
+		self.assertAlmostEqual(prorate_target(90000, "2026-04-16", "2026-04-30"), 45000.0, places=2)
+
+	def test_a_full_year_no_longer_reads_as_twelve_hundred_percent(self):
+		"""The bug this fixes: revenue matching a year of target should read 100%."""
+		monthly_target = 10000
+		year_revenue = 120000
+		target = prorate_target(monthly_target, "2026-01-01", "2026-12-31")
+
+		self.assertEqual(round(year_revenue / target * 100), 100)
+
+
+class TestWorkspaceWidgetNamesMatchLabels(FrappeTestCase):
+	"""frappe/public/js/frappe/views/workspace/blocks/block.js resolves a block by
+	matching page_data[...].items on `label` against the block's *_name. If they
+	differ the block silently renders nothing — which is exactly how this
+	workspace shipped with an empty "This Month" section."""
+
+	def setUp(self):
+		self.ws = load_json("workspace", "management_reports", "management_reports.json")
+		self.blocks = json.loads(self.ws["content"])
+
+	def test_number_card_rows_have_label_equal_to_name(self):
+		for row in self.ws["number_cards"]:
+			with self.subTest(card=row["number_card_name"]):
+				self.assertEqual(row["label"], row["number_card_name"])
+
+	def test_chart_rows_have_label_equal_to_name(self):
+		for row in self.ws["charts"]:
+			with self.subTest(chart=row["chart_name"]):
+				self.assertEqual(row["label"], row["chart_name"])
+
+	def test_every_widget_block_resolves_against_a_row_label(self):
+		card_labels = {row["label"] for row in self.ws["number_cards"]}
+		chart_labels = {row["label"] for row in self.ws["charts"]}
+
+		for block in self.blocks:
+			if block["type"] == "number_card":
+				with self.subTest(block=block["data"]["number_card_name"]):
+					self.assertIn(block["data"]["number_card_name"], card_labels)
+			if block["type"] == "chart":
+				with self.subTest(block=block["data"]["chart_name"]):
+					self.assertIn(block["data"]["chart_name"], chart_labels)
+
+	def test_shipped_card_and_chart_docs_are_named_the_same_as_their_labels(self):
+		for row in self.ws["number_cards"]:
+			folder = row["number_card_name"].lower().replace(" ", "_")
+			card = load_json("number_card", folder, folder + ".json")
+			with self.subTest(card=row["number_card_name"]):
+				self.assertEqual(card["name"], row["number_card_name"])
+				self.assertEqual(card["label"], row["number_card_name"])
+
+		for row in self.ws["charts"]:
+			folder = row["chart_name"].lower().replace(" ", "_")
+			chart = load_json("dashboard_chart", folder, folder + ".json")
+			with self.subTest(chart=row["chart_name"]):
+				self.assertEqual(chart["name"], row["chart_name"])
+				self.assertEqual(chart["chart_name"], row["chart_name"])

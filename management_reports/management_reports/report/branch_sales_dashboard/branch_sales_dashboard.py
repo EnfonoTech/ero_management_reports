@@ -3,7 +3,11 @@ from frappe.query_builder import Order
 from frappe.utils import flt
 
 from management_reports.management_reports.permissions import check_access
-from management_reports.utils.config import get_branch_display_names, get_branch_targets
+from management_reports.utils.config import (
+	get_branch_display_names,
+	get_branch_targets,
+	period_months,
+)
 from management_reports.utils.currency import get_company_abbr, get_currency, strip_abbr
 from management_reports.utils.dimensions import get_branch_dimension
 from management_reports.utils.query import (
@@ -102,14 +106,18 @@ def get_data(filters):
 		.run(as_dict=True)
 	)
 
-	targets = get_branch_targets((filters or {}).get("company"))
+	filters = filters or {}
+	targets = get_branch_targets(filters.get("company"))
+	# Targets are entered per month; scale them to whatever range is filtered so
+	# a quarter reads ~100% rather than ~300%.
+	months = period_months(filters.get("from_date"), filters.get("to_date")) if targets else 0
 
 	for row in data:
 		row["currency"] = currency
 		if cogs is not None:
 			set_derived_profit(row)
 
-		target = flt(targets.get(row.get("branch")))
+		target = flt(targets.get(row.get("branch"))) * months
 		if target:
 			row["target"] = target
 			row["achieved"] = (flt(row.get("revenue")) / target) * 100
