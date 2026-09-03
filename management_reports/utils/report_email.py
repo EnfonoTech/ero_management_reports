@@ -30,10 +30,13 @@ from management_reports.utils.currency import get_currency
 # a monthly report to one day.
 SINGLE_DATE_REPORTS = {"Daily Summary"}
 
+# "Collections by Payment Mode" rides along with every digest: the summary says
+# what was earned, this says what was actually taken and in what tender, which is
+# the figure the counter is reconciled against.
 DEFAULT_REPORTS = {
-	"Daily": ("Daily Summary",),
-	"Weekly": ("Monthly Summary",),
-	"Monthly": ("Monthly Summary",),
+	"Daily": ("Daily Summary", "Collections by Payment Mode"),
+	"Weekly": ("Monthly Summary", "Collections by Payment Mode"),
+	"Monthly": ("Monthly Summary", "Collections by Payment Mode"),
 }
 
 MAX_ROWS_IN_EMAIL = 50
