@@ -8,12 +8,17 @@ the till at close, so it is reported GROSS (VAT included) — Daily Summary's
 Invoices with no tender recorded (dine-in "pay at counter", or anything settled
 by a separate Payment Entry) are reported on their own row rather than dropped,
 so the rows always add up to the day's invoiced total.
+
+Loyalty points are settled the same way: ERPNext does NOT reduce grand_total for
+a redemption, it credits the receivable separately, so a 104.00 bill paid with
+15.30 of points is tendered at 88.70. Without a row of its own that 15.30 simply
+vanished from the split and the rows stopped adding up.
 """
 
 import frappe
 from frappe import _
 from frappe.query_builder import Case
-from frappe.query_builder.functions import Sum
+from frappe.query_builder.functions import Coalesce, Sum
 from frappe.utils import flt
 
 from management_reports.management_reports.permissions import check_access
@@ -22,6 +27,16 @@ from management_reports.utils.dimensions import get_branch_dimension
 from management_reports.utils.query import base_query, invoice_count
 
 UNRECORDED_LABEL = _("Not recorded at till")
+
+
+def loyalty_label() -> str:
+	"""Row label for points, named after the site's own programme when there is
+	exactly one -- "Brew Rewards (points)" reads better to a Kaapqah cashier than
+	a generic string, and this app serves more than one client."""
+	programs = frappe.get_all("Loyalty Program", pluck="name", limit_page_length=2)
+	if len(programs) == 1:
+		return _("{0} (points)").format(programs[0])
+	return _("Loyalty points (redeemed)")
 
 
 def settled_total(SI):
@@ -113,7 +128,10 @@ def get_untendered(filters) -> list:
 		.select(
 			ctx.branch_column.as_("branch"),
 			invoice_count(ctx.SI).as_("invoices"),
-			Sum(settled_total(ctx.SI)).as_("amount"),
+			# Net of any points redeemed: the counter never saw that part, and it
+			# is reported on the Brew Points row instead. Counting it here too
+			# would overstate the day by the redeemed amount.
+			Sum(settled_total(ctx.SI) - Coalesce(ctx.SI.loyalty_amount, 0)).as_("amount"),
 		)
 		.groupby(ctx.branch_column)
 		.run(as_dict=True)
@@ -129,9 +147,43 @@ def get_untendered(filters) -> list:
 	return out
 
 
+def get_loyalty(filters) -> list:
+	"""Value settled with Brew Points rather than money.
+
+	ERPNext leaves grand_total alone on a redemption and posts a separate credit,
+	so the tender rows are already net of points -- the points themselves belong
+	on a row of their own or the split silently under-reports the day.
+
+	A site with no loyalty programme sums to zero and gets no row, so this is a
+	no-op everywhere it does not apply.
+	"""
+	ctx = base_query(filters, with_items=False)
+
+	rows = (
+		ctx.query.select(
+			ctx.branch_column.as_("branch"),
+			invoice_count(ctx.SI).as_("invoices"),
+			Sum(Coalesce(ctx.SI.loyalty_amount, 0)).as_("amount"),
+		)
+		.where(Coalesce(ctx.SI.loyalty_amount, 0) > 0)
+		.groupby(ctx.branch_column)
+		.run(as_dict=True)
+	)
+
+	label = loyalty_label()
+	out = []
+	for row in rows:
+		if not flt(row.get("amount")):
+			continue
+		row["mode_of_payment"] = label
+		out.append(row)
+
+	return out
+
+
 def get_data(filters):
 	currency = get_currency((filters or {}).get("company"))
-	data = get_tendered(filters) + get_untendered(filters)
+	data = get_tendered(filters) + get_untendered(filters) + get_loyalty(filters)
 
 	# Biggest tender first — the reader wants to know what dominated the day.
 	data.sort(key=lambda row: flt(row.get("amount")), reverse=True)
@@ -160,6 +212,7 @@ def get_chart(data):
 
 def get_report_summary(data, filters):
 	currency = get_currency((filters or {}).get("company"))
+	points_label = loyalty_label()
 	total = sum(flt(row.get("amount")) for row in data)
 
 	summary = [
@@ -185,7 +238,11 @@ def get_report_summary(data, filters):
 				"label": mode,
 				"datatype": "Currency",
 				"currency": currency,
-				"indicator": "Red" if mode == UNRECORDED_LABEL else "Green",
+				# Points are not money taken at the counter — neither a till
+				# problem (red) nor cash in hand (green).
+				"indicator": "Red"
+				if mode == UNRECORDED_LABEL
+				else ("Blue" if mode == points_label else "Green"),
 			}
 		)
 
