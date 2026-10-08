@@ -28,6 +28,18 @@
   "column_break_2",
   "email_company",
   "email_format",
+  "schedule_section",
+  "send_daily",
+  "send_weekly",
+  "send_monthly",
+  "column_break_sched",
+  "weekly_send_day",
+  "monthly_send_day",
+  "monthly_attach_xlsx",
+  "frequency_reports_section",
+  "daily_reports",
+  "weekly_reports",
+  "monthly_reports",
   "email_reports_section",
   "email_reports",
   "recipients_section",
@@ -191,6 +203,80 @@
    "depends_on": "auto_email_enabled"
   },
   {
+   "fieldname": "schedule_section",
+   "fieldtype": "Section Break",
+   "label": "Send Several Schedules",
+   "depends_on": "auto_email_enabled",
+   "description": "Tick the digests to send. Leave all three unticked to keep the single Email Frequency above."
+  },
+  {
+   "fieldname": "send_daily",
+   "fieldtype": "Check",
+   "label": "Send Daily",
+   "description": "Yesterday's figures."
+  },
+  {
+   "fieldname": "send_weekly",
+   "fieldtype": "Check",
+   "label": "Send Weekly",
+   "description": "The seven days ending yesterday."
+  },
+  {
+   "fieldname": "send_monthly",
+   "fieldtype": "Check",
+   "label": "Send Monthly",
+   "description": "The whole previous month."
+  },
+  {
+   "fieldname": "column_break_sched",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "weekly_send_day",
+   "fieldtype": "Select",
+   "label": "Weekly Send Day",
+   "options": "Monday\nTuesday\nWednesday\nThursday\nFriday\nSaturday\nSunday",
+   "default": "Monday"
+  },
+  {
+   "fieldname": "monthly_send_day",
+   "fieldtype": "Int",
+   "label": "Monthly Send Day",
+   "default": "1",
+   "description": "Day of the month, 1-28. The report always covers the previous full month."
+  },
+  {
+   "fieldname": "monthly_attach_xlsx",
+   "fieldtype": "Check",
+   "label": "Attach Excel To Monthly Digest",
+   "description": "The monthly digest is long; the workbook is easier to keep and filter."
+  },
+  {
+   "fieldname": "frequency_reports_section",
+   "fieldtype": "Section Break",
+   "label": "Reports Per Schedule",
+   "depends_on": "auto_email_enabled",
+   "description": "Used when the schedules above are ticked. A schedule with no reports listed sends its built-in default."
+  },
+  {
+   "fieldname": "daily_reports",
+   "fieldtype": "Table MultiSelect",
+   "label": "Daily Reports",
+   "options": "Management Report Selection"
+  },
+  {
+   "fieldname": "weekly_reports",
+   "fieldtype": "Table MultiSelect",
+   "label": "Weekly Reports",
+   "options": "Management Report Selection"
+  },
+  {
+   "fieldname": "monthly_reports",
+   "fieldtype": "Table MultiSelect",
+   "label": "Monthly Reports",
+   "options": "Management Report Selection"
+  },
+  {
    "fieldname": "email_reports_section",
    "fieldtype": "Section Break",
    "label": "Reports To Send",
@@ -227,7 +313,7 @@
  "idx": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-04-11 00:00:00.000000",
+ "modified": "2026-10-08 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Management Reports",
  "name": "Management Reports Settings",

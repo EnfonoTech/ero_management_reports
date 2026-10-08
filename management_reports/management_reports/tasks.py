@@ -14,52 +14,61 @@ from frappe import _
 from frappe.utils import cint, cstr, get_weekday, now_datetime, nowdate
 
 from management_reports.management_reports.permissions import check_access
-from management_reports.utils.report_email import get_recipients, send_digest
+from management_reports.utils.report_email import active_frequencies, get_recipients, send_digest
 from management_reports.utils.settings import SETTINGS_DOCTYPE
 
 RUN_LOG = "Management Report Run Log"
 WEEKLY_SEND_DAY = "Monday"
+WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 MONTHLY_SEND_DAY = 1
 
 
 def send_scheduled_reports():
-	"""Hourly cron entry. Enqueues the digest when this hour is the configured one."""
+	"""Hourly cron entry. Enqueues each digest that is due at this hour."""
 	settings = frappe.get_cached_doc(SETTINGS_DOCTYPE)
 
 	if not settings.auto_email_enabled:
-		return
-
-	frequency = settings.email_frequency
-	if not frequency:
 		return
 
 	now = now_datetime()
 	if now.hour != cint(settings.email_hour):
 		return
 
-	if not is_due(frequency, now):
-		return
+	for frequency in active_frequencies(settings):
+		if not is_due(frequency, now, settings):
+			continue
 
-	if already_sent(frequency, nowdate()):
-		return
+		if already_sent(frequency, nowdate()):
+			continue
 
-	frappe.enqueue(
-		"management_reports.management_reports.tasks.run_digest",
-		queue="long",
-		timeout=1500,
-		enqueue_after_commit=True,
-		job_name="mgmt_report_digest_" + frequency + "_" + cstr(nowdate()),
-		frequency=frequency,
-	)
+		frappe.enqueue(
+			"management_reports.management_reports.tasks.run_digest",
+			queue="long",
+			timeout=1500,
+			enqueue_after_commit=True,
+			job_name="mgmt_report_digest_" + frequency + "_" + cstr(nowdate()),
+			frequency=frequency,
+		)
 
 
-def is_due(frequency: str, now) -> bool:
+def weekly_send_day(settings=None) -> str:
+	day = cstr(settings.get("weekly_send_day")) if settings else ""
+	return day if day in WEEKDAYS else WEEKLY_SEND_DAY
+
+
+def monthly_send_day(settings=None) -> int:
+	# Capped at 28 so February is never skipped.
+	day = cint(settings.get("monthly_send_day")) if settings else 0
+	return min(day, 28) if day >= 1 else MONTHLY_SEND_DAY
+
+
+def is_due(frequency: str, now, settings=None) -> bool:
 	if frequency == "Daily":
 		return True
 	if frequency == "Weekly":
-		return get_weekday(now) == WEEKLY_SEND_DAY
+		return get_weekday(now) == weekly_send_day(settings)
 	if frequency == "Monthly":
-		return now.day == MONTHLY_SEND_DAY
+		return now.day == monthly_send_day(settings)
 
 	return False
 

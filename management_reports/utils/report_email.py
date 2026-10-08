@@ -106,7 +106,36 @@ def run_report(report_name: str, filters: dict) -> dict:
 	}
 
 
+FREQUENCY_FLAGS = (("Daily", "send_daily"), ("Weekly", "send_weekly"), ("Monthly", "send_monthly"))
+FREQUENCY_REPORT_FIELDS = {"Daily": "daily_reports", "Weekly": "weekly_reports", "Monthly": "monthly_reports"}
+
+
+def active_frequencies(settings) -> list:
+	"""The digests to send: the ticked schedules, or — when none is ticked, as on every
+	site configured before schedules existed — the single Email Frequency."""
+	ticked = [frequency for frequency, flag in FREQUENCY_FLAGS if cint(settings.get(flag))]
+	if ticked:
+		return ticked
+
+	return [settings.email_frequency] if settings.email_frequency else []
+
+
+def uses_schedules(settings) -> bool:
+	return any(cint(settings.get(flag)) for _frequency, flag in FREQUENCY_FLAGS)
+
+
 def get_configured_reports(settings, frequency: str) -> list:
+	"""Reports for one digest.
+
+	With schedules ticked: that schedule's own list, else its built-in default. The old
+	shared list is NOT used there — it is written for the single daily digest and would
+	put a one-day report into a monthly email. With no schedule ticked it is unchanged:
+	the shared list, else the frequency's default.
+	"""
+	if uses_schedules(settings):
+		own = settings.get(FREQUENCY_REPORT_FIELDS.get(frequency, "")) or []
+		return [row.report for row in own if row.report] or list(DEFAULT_REPORTS.get(frequency, ()))
+
 	selected = [row.report for row in (settings.email_reports or []) if row.report]
 
 	return selected or list(DEFAULT_REPORTS.get(frequency, ()))
@@ -395,6 +424,8 @@ def build_digest(settings, frequency: str, as_on=None) -> frappe._dict:
 def send_digest(settings, frequency: str, recipients: list, as_on=None) -> frappe._dict:
 	digest = build_digest(settings, frequency, as_on)
 	fmt = settings.email_format or "HTML Summary"
+	if frequency == "Monthly" and cint(settings.get("monthly_attach_xlsx")) and fmt == "HTML Summary":
+		fmt = "Both"   # the in-mail summary stays; the workbook rides along
 	attachments = []
 
 	if fmt in ("XLSX Attachment", "Both"):
