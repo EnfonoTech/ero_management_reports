@@ -23,7 +23,7 @@ PROVIDERS = {
 	ANTHROPIC: {
 		"url": "https://api.anthropic.com/v1/messages",
 		"key_field": "anthropic_api_key",
-		"default_model": "claude-sonnet-4-20250514",
+		"default_model": "claude-sonnet-5-5",
 		"style": "anthropic",
 	},
 	OPENAI: {
@@ -90,7 +90,7 @@ def get_model(settings, provider: str) -> str:
 
 def models_for(provider: str) -> tuple:
 	return {
-		ANTHROPIC: ("claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"),
+		ANTHROPIC: ("claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"),
 		OPENAI: ("gpt-4o", "gpt-4o-mini", "gpt-4-turbo"),
 		DEEPSEEK: ("deepseek-chat", "deepseek-reasoner"),
 	}.get(provider, ())

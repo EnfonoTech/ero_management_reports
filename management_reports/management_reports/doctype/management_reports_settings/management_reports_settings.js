@@ -2,7 +2,7 @@
 // implementer verify AI and email delivery before switching automation on.
 
 const MODELS_BY_PROVIDER = {
-	Anthropic: ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"],
+	Anthropic: ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"],
 	OpenAI: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
 	DeepSeek: ["deepseek-chat", "deepseek-reasoner"],
 };

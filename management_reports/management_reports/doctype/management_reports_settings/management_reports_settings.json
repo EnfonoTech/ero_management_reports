@@ -141,8 +141,8 @@
    "fieldname": "ai_model",
    "fieldtype": "Select",
    "label": "AI Model",
-   "options": "claude-sonnet-4-20250514\nclaude-3-5-haiku-20241022\ngpt-4o\ngpt-4o-mini\ngpt-4-turbo\ndeepseek-chat\ndeepseek-reasoner",
-   "default": "claude-sonnet-4-20250514",
+   "options": "claude-sonnet-5-5\nclaude-haiku-5-5\nclaude-opus-5-5\ngpt-4o\ngpt-4o-mini\ngpt-4-turbo\ndeepseek-chat\ndeepseek-reasoner",
+   "default": "claude-sonnet-5-5",
    "description": "Options are filtered to the selected provider. A model from another provider falls back to that provider's default."
   },
   {
