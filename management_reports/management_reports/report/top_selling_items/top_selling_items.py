@@ -9,13 +9,13 @@ from management_reports.utils.currency import get_currency
 from management_reports.utils.query import (
 	CHART_COLORS,
 	add_profit_columns,
-	base_query,
 	cogs_available,
-	cogs_expression,
+	ctx_cogs,
 	currency_label,
 	rounded_sum,
 	set_derived_profit,
 )
+from management_reports.utils.sources import collect
 
 DEFAULT_LIMIT = 50
 
@@ -66,40 +66,52 @@ def get_columns(filters):
 
 def get_data(filters):
 	filters = frappe._dict(filters or {})
-	ctx = base_query(filters)
 	currency = get_currency(filters.get("company"))
 	limit = cint(filters.get("limit")) or DEFAULT_LIMIT
+	cogs = cogs_available()
 
-	query = ctx.query
-	if filters.get("item_group"):
-		query = query.where(ctx.SII.item_group == filters.item_group)
+	def build(ctx):
+		query = ctx.query
+		if filters.get("item_group"):
+			query = query.where(ctx.item_group == filters.item_group)
 
-	selects = [
-		ctx.SII.item_code,
-		ctx.SII.item_name,
-		ctx.SII.item_group,
-		ctx.SII.stock_uom.as_("uom"),
-		rounded_sum(ctx.SII.qty).as_("qty"),
-		Count(ctx.SII.parent).distinct().as_("invoices"),
-		rounded_sum(ctx.SII.amount).as_("revenue"),
-	]
+		selects = [
+			ctx.SII.item_code,
+			ctx.SII.item_name,
+			ctx.item_group.as_("item_group"),
+			ctx.uom.as_("uom"),
+			rounded_sum(ctx.qty).as_("qty"),
+			Count(ctx.SII.parent).distinct().as_("invoices"),
+			rounded_sum(ctx.amount).as_("revenue"),
+		]
 
-	cogs = cogs_expression(ctx.SII)
-	if cogs is not None:
-		selects.append(cogs.as_("cogs"))
+		if cogs:
+			selects.append(ctx_cogs(ctx).as_("cogs"))
 
-	data = (
-		query.select(*selects)
-		.groupby(ctx.SII.item_code, ctx.SII.item_name, ctx.SII.item_group, ctx.SII.stock_uom)
-		.orderby(rounded_sum(ctx.SII.amount), order=Order.desc)
-		.limit(limit)
-		.run(as_dict=True)
+		query = (
+			query.select(*selects)
+			.groupby(ctx.SII.item_code, ctx.SII.item_name, ctx.item_group, ctx.uom)
+			.orderby(rounded_sum(ctx.amount), order=Order.desc)
+		)
+
+		# With several sources the cut happens after merging, or an item big in only one of them
+		# could be dropped from its own source's top list before the totals are added up.
+		return (query if ctx.multi else query.limit(limit)).run(as_dict=True)
+
+	data = collect(
+		filters,
+		build,
+		keys=("item_code", "item_name", "item_group", "uom"),
+		sums=("qty", "invoices", "revenue", "cogs"),
+		sort=lambda row: row.get("revenue") or 0,
+		reverse=True,
+		limit=limit,
 	)
 
 	for index, row in enumerate(data, 1):
 		row["rank"] = index
 		row["currency"] = currency
-		if cogs is not None:
+		if cogs:
 			set_derived_profit(row)
 
 	return data

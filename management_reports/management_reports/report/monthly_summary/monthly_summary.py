@@ -4,15 +4,15 @@ from management_reports.management_reports.permissions import check_access
 from management_reports.utils.currency import get_currency
 from management_reports.utils.dimensions import get_branch_dimension
 from management_reports.utils.query import (
-	base_query,
 	cogs_available,
-	cogs_expression,
+	ctx_cogs,
 	currency_label,
 	format_month_key,
 	invoice_count,
 	month_key_column,
 	rounded_sum,
 )
+from management_reports.utils.sources import collect
 
 
 def execute(filters=None):
@@ -82,26 +82,34 @@ def get_columns(filters):
 
 
 def get_data(filters):
-	ctx = base_query(filters)
 	currency = get_currency((filters or {}).get("company"))
-	month_key = month_key_column(ctx.SI)
+	cogs = cogs_available()
 
-	selects = [
-		month_key.as_("month_key"),
-		ctx.branch_column.as_("branch"),
-		invoice_count(ctx.SI).as_("invoices"),
-		rounded_sum(ctx.SII.amount).as_("income"),
-	]
+	def build(ctx):
+		month_key = month_key_column(ctx)
+		selects = [
+			month_key.as_("month_key"),
+			ctx.branch_column.as_("branch"),
+			invoice_count(ctx.SI).as_("invoices"),
+			rounded_sum(ctx.amount).as_("income"),
+		]
 
-	cogs = cogs_expression(ctx.SII)
-	if cogs is not None:
-		selects.append(cogs.as_("expenses"))
+		if cogs:
+			selects.append(ctx_cogs(ctx).as_("expenses"))
 
-	data = (
-		ctx.query.select(*selects)
-		.groupby(month_key, ctx.branch_column)
-		.orderby(month_key, ctx.branch_column)
-		.run(as_dict=True)
+		return (
+			ctx.query.select(*selects)
+			.groupby(month_key, ctx.branch_column)
+			.orderby(month_key, ctx.branch_column)
+			.run(as_dict=True)
+		)
+
+	data = collect(
+		filters,
+		build,
+		keys=("month_key", "branch"),
+		sums=("invoices", "income", "expenses"),
+		sort=lambda row: (row.get("month_key") or "", row.get("branch") or ""),
 	)
 
 	for row in data:
@@ -112,7 +120,7 @@ def get_data(filters):
 		invoices = row.get("invoices") or 0
 		row["avg_invoice"] = (income / invoices) if invoices else 0
 
-		if cogs is not None:
+		if cogs:
 			expenses = row.get("expenses") or 0
 			row["profit"] = income - expenses
 			row["margin"] = (row["profit"] / income * 100) if income else 0

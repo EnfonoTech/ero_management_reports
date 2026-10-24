@@ -24,6 +24,24 @@ bench build --app management_reports
 
 > **Note:** The internal app name is `management_reports` (Frappe app naming). The display name is "Management Reports".
 
+## Additional Sales Sources
+
+Some sites record part of their sales outside Sales Invoice, for example a counter sale that carries no tax.
+List such a document under **Management Reports Settings → Additional Sales Sources** and the dashboard, the
+sales reports and the AI data count it next to Sales Invoices: revenue, cost, invoices, customers, returns.
+
+| Setting | Meaning |
+|---|---|
+| Document Type / Item Table Document Type | The submittable sale document and its item table |
+| Net Total Field | What the customer was charged, after any discount (also the dashboard revenue) |
+| Total Before Discount Field | Optional. When set, item amounts are scaled by net / this total so item reports match the net |
+| Item Cost Field | Cost of goods on each item row (this is the COGS for that source) |
+| Other field names | Optional: date, company, branch, customer, customer name, is-return, item qty / amount. Blank = the usual names |
+
+Empty by default, so existing sites are unchanged. Fields are checked against doctype meta on save; a row that
+later stops being valid is skipped and logged. Not covered: Collections by Payment Mode and Loyalty Points Redeemed
+(they read Payment Entries / loyalty data, not sales documents).
+
 ## Post-Installation Setup
 
 1. **Go to** `/app/management-reports-settings`

@@ -12,6 +12,8 @@
   "branch_label",
   "column_break_ds1",
   "cogs_source",
+  "extra_sources_section",
+  "extra_sales_sources",
   "ai_settings_section",
   "ai_provider",
   "enable_ai_analysis",
@@ -59,7 +61,7 @@
    "fieldtype": "Data",
    "label": "Branch Dimension Fieldname",
    "default": "cost_center",
-   "description": "Link fieldname on Sales Invoice that identifies the branch. Defaults to cost_center. Must be an existing Link field — validated on save."
+   "description": "Link fieldname on Sales Invoice that identifies the branch. Defaults to cost_center. Must be an existing Link field \u2014 validated on save."
   },
   {
    "fieldname": "branch_dimension_doctype",
@@ -73,7 +75,7 @@
    "fieldtype": "Data",
    "label": "Branch Label",
    "default": "Branch",
-   "description": "What this site calls a branch — Branch, Outlet, Station, Site. Used as the column and filter label across all reports."
+   "description": "What this site calls a branch \u2014 Branch, Outlet, Station, Site. Used as the column and filter label across all reports."
   },
   {
    "fieldname": "column_break_ds1",
@@ -85,7 +87,7 @@
    "label": "COGS Source",
    "options": "Item Valuation\nNone",
    "default": "Item Valuation",
-   "description": "Item Valuation uses Qty x Incoming Rate. Choose None on sites without perpetual inventory — COGS, Profit and Margin columns are then hidden rather than reported as zero cost."
+   "description": "Item Valuation uses Qty x Incoming Rate. Choose None on sites without perpetual inventory \u2014 COGS, Profit and Margin columns are then hidden rather than reported as zero cost."
   },
   {
    "fieldname": "ai_settings_section",
@@ -201,7 +203,7 @@
    "fieldtype": "Table MultiSelect",
    "label": "Reports",
    "options": "Management Report Selection",
-   "description": "Leave empty to send the frequency's default report — Daily Summary for daily, Monthly Summary for weekly and monthly."
+   "description": "Leave empty to send the frequency's default report \u2014 Daily Summary for daily, Monthly Summary for weekly and monthly."
   },
   {
    "fieldname": "recipients_section",
@@ -222,12 +224,25 @@
    "description": "Superseded by the Recipients table above. Kept so existing values can be migrated; will be removed.",
    "read_only": 1,
    "depends_on": "eval:doc.email_recipients"
+  },
+  {
+   "fieldname": "extra_sources_section",
+   "fieldtype": "Section Break",
+   "label": "Additional Sales Sources",
+   "collapsible": 1,
+   "description": "Count sales recorded in another document (for example a non-tax counter sale) in the dashboard and every sales report, next to Sales Invoices. Leave empty to report Sales Invoices only."
+  },
+  {
+   "fieldname": "extra_sales_sources",
+   "fieldtype": "Table",
+   "label": "Additional Sales Sources",
+   "options": "Management Reports Extra Source"
   }
  ],
  "idx": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-04-11 00:00:00.000000",
+ "modified": "2026-10-24 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Management Reports",
  "name": "Management Reports Settings",

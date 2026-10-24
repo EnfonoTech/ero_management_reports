@@ -1,0 +1,142 @@
+{
+ "actions": [],
+ "creation": "2026-10-24 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "source_doctype",
+  "item_doctype",
+  "total_field",
+  "item_cost_field",
+  "column_break_1",
+  "gross_total_field",
+  "return_field",
+  "section_break_2",
+  "date_field",
+  "company_field",
+  "branch_field",
+  "column_break_3",
+  "customer_field",
+  "customer_name_field",
+  "item_qty_field",
+  "item_amount_field"
+ ],
+ "fields": [
+  {
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "label": "Document Type",
+   "options": "DocType",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "A submittable document that records sales outside Sales Invoice, e.g. a cash or non-tax sale."
+  },
+  {
+   "fieldname": "item_doctype",
+   "fieldtype": "Link",
+   "label": "Item Table Document Type",
+   "options": "DocType",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Its child table of sold items, e.g. NT Sale Item."
+  },
+  {
+   "fieldname": "total_field",
+   "fieldtype": "Data",
+   "label": "Net Total Field",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Currency field on the document holding what the customer was charged (after any discount)."
+  },
+  {
+   "fieldname": "item_cost_field",
+   "fieldtype": "Data",
+   "label": "Item Cost Field",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Currency field on the item row holding its cost of goods."
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "gross_total_field",
+   "fieldtype": "Data",
+   "label": "Total Before Discount Field",
+   "description": "Optional. When set, each item amount is scaled by net total / this total so whole-bill discounts reach item-level reports."
+  },
+  {
+   "fieldname": "return_field",
+   "fieldtype": "Data",
+   "label": "Is Return Field",
+   "default": "is_return",
+   "description": "Check field marking a return. Defaults to is_return."
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Field Names (leave blank for the usual ones)",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "date_field",
+   "fieldtype": "Data",
+   "label": "Date Field",
+   "default": "posting_date"
+  },
+  {
+   "fieldname": "company_field",
+   "fieldtype": "Data",
+   "label": "Company Field",
+   "default": "company"
+  },
+  {
+   "fieldname": "branch_field",
+   "fieldtype": "Data",
+   "label": "Branch Field",
+   "description": "Link field on the document for the branch. Defaults to the branch dimension in Settings."
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break",
+   "label": ""
+  },
+  {
+   "fieldname": "customer_field",
+   "fieldtype": "Data",
+   "label": "Customer Field",
+   "default": "customer"
+  },
+  {
+   "fieldname": "customer_name_field",
+   "fieldtype": "Data",
+   "label": "Customer Name Field",
+   "default": "customer_name"
+  },
+  {
+   "fieldname": "item_qty_field",
+   "fieldtype": "Data",
+   "label": "Item Quantity Field",
+   "default": "qty"
+  },
+  {
+   "fieldname": "item_amount_field",
+   "fieldtype": "Data",
+   "label": "Item Amount Field",
+   "default": "amount"
+  }
+ ],
+ "idx": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-10-24 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Management Reports",
+ "name": "Management Reports Extra Source",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

@@ -56,23 +56,57 @@ def base_query(filters=None, with_items=True, only_returns=False) -> frappe._dic
 
 	query = apply_branch_scope(query, branch_column, dim.doctype)
 
-	return frappe._dict({"query": query, "SI": SI, "SII": SII, "dim": dim, "branch_column": branch_column})
+	ctx = frappe._dict(
+		{
+			"query": query,
+			"SI": SI,
+			"SII": SII,
+			"dim": dim,
+			"branch_column": branch_column,
+			"source": "Sales Invoice",
+			"multi": False,
+			# What reports aggregate, named once so another sales doctype can supply its own
+			# (see utils/sources.py). For Sales Invoice these are the columns reports always read.
+			"date_column": SI.posting_date,
+			"doc_total": SI.grand_total,
+			"customer": SI.customer,
+			"customer_name": SI.customer_name,
+		}
+	)
+
+	if with_items:
+		ctx.update(
+			{
+				"amount": SII.amount,
+				"qty": SII.qty,
+				"cost": SII.qty * SII.incoming_rate,
+				"item_group": SII.item_group,
+				"uom": SII.stock_uom,
+			}
+		)
+
+	return ctx
 
 
 def apply_date_range(query, SI, filters):
 	"""Apply a single ``date`` filter, or a ``from_date``/``to_date`` range."""
+	return apply_date_range_on(query, SI.posting_date, filters)
+
+
+def apply_date_range_on(query, date_column, filters):
+	"""``apply_date_range`` for any document date column."""
 	if filters.get("date"):
-		return query.where(SI.posting_date == getdate(filters.date))
+		return query.where(date_column == getdate(filters.date))
 
 	from_date = filters.get("from_date")
 	to_date = filters.get("to_date")
 
 	if from_date and to_date:
-		return query.where(SI.posting_date[getdate(from_date) : getdate(to_date)])
+		return query.where(date_column[getdate(from_date) : getdate(to_date)])
 	if from_date:
-		return query.where(SI.posting_date >= getdate(from_date))
+		return query.where(date_column >= getdate(from_date))
 	if to_date:
-		return query.where(SI.posting_date <= getdate(to_date))
+		return query.where(date_column <= getdate(to_date))
 
 	return query
 
@@ -102,6 +136,14 @@ def cogs_expression(SII):
 		return None
 
 	return Round(Sum(SII.qty * SII.incoming_rate), 2)
+
+
+def ctx_cogs(ctx):
+	"""``cogs_expression`` for a query context: the source's own cost column, or None."""
+	if not cogs_available():
+		return None
+
+	return Round(Sum(ctx.cost), 2)
 
 
 def add_profit_columns(columns, currency, *, profit_label, cogs_label=None):
@@ -146,9 +188,13 @@ def set_derived_profit(row, revenue_field="revenue", cost_field="cogs"):
 # --- month helpers --------------------------------------------------------
 
 
-def month_key_column(SI):
-	"""``DATE_FORMAT(posting_date, '%Y-%m')`` — the literal is bound as a param."""
-	return DateFormat(SI.posting_date, MONTH_KEY_FORMAT)
+def month_key_column(source):
+	"""``DATE_FORMAT(posting_date, '%Y-%m')`` — the literal is bound as a param.
+
+	Takes a query context (any sales source) or, for older callers, a Sales Invoice table.
+	"""
+	date_column = source.date_column if isinstance(source, dict) else source.posting_date
+	return DateFormat(date_column, MONTH_KEY_FORMAT)
 
 
 def format_month_key(key) -> str:
@@ -170,8 +216,9 @@ def invoice_count(SI):
 	return Count(SI.name).distinct()
 
 
-def customer_count(SI):
-	return Count(SI.customer).distinct()
+def customer_count(source):
+	"""Distinct customers of a query context (any sales source), or of a Sales Invoice table."""
+	return Count(source.customer).distinct()
 
 
 def rounded_sum(column):
