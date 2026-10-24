@@ -9,6 +9,7 @@ from management_reports.utils.dimensions import DEFAULT_DIMENSION, get_dimension
 class ManagementReportsSettings(Document):
 	def validate(self):
 		self.validate_branch_dimension()
+		self.validate_extra_sources()
 		self.validate_ai_model()
 		self.validate_schedule()
 		self.dedupe_recipients()
@@ -34,6 +35,20 @@ class ManagementReportsSettings(Document):
 			)
 
 		self.branch_dimension_doctype = options[self.branch_dimension_fieldname]
+
+	def validate_extra_sources(self):
+		"""Refuse an additional sales source whose fields do not line up.
+
+		Reports read these field names through SQL, so they are checked against doctype meta
+		here, where a person can fix them, rather than failing on a dashboard later.
+		"""
+		from management_reports.utils.sources import clear_source_cache, problems_with
+
+		clear_source_cache()
+		for row in self.extra_sales_sources or []:
+			problems = problems_with(row)
+			if problems:
+				frappe.throw("<br>".join(problems), title=_("Invalid Additional Sales Source"))
 
 	def validate_ai_model(self):
 		"""Keep the model consistent with the provider.

@@ -16,12 +16,13 @@ from management_reports.utils.ai import (
 )
 from management_reports.utils.currency import get_currency
 from management_reports.utils.query import (
-	base_query,
-	cogs_expression,
+	cogs_available,
+	ctx_cogs,
 	invoice_count,
 	month_key_column,
 	rounded_sum,
 )
+from management_reports.utils.sources import collect
 
 
 @frappe.whitelist()
@@ -172,82 +173,120 @@ def gather_analysis_data(company):
 
 
 def get_monthly_branch(filters) -> list:
-	ctx = base_query(filters)
-	month_key = month_key_column(ctx.SI)
-	selects = [
-		month_key.as_("month"),
-		ctx.branch_column.as_("branch"),
-		invoice_count(ctx.SI).as_("invoices"),
-		rounded_sum(ctx.SII.amount).as_("revenue"),
-	]
+	def build(ctx):
+		month_key = month_key_column(ctx)
+		selects = [
+			month_key.as_("month"),
+			ctx.branch_column.as_("branch"),
+			invoice_count(ctx.SI).as_("invoices"),
+			rounded_sum(ctx.amount).as_("revenue"),
+		]
 
-	cogs = cogs_expression(ctx.SII)
-	if cogs is not None:
-		selects.append(cogs.as_("cogs"))
+		if cogs_available():
+			selects.append(ctx_cogs(ctx).as_("cogs"))
 
-	return (
-		ctx.query.select(*selects)
-		.groupby(month_key, ctx.branch_column)
-		.orderby(month_key, ctx.branch_column)
-		.run(as_dict=True)
+		return (
+			ctx.query.select(*selects)
+			.groupby(month_key, ctx.branch_column)
+			.orderby(month_key, ctx.branch_column)
+			.run(as_dict=True)
+		)
+
+	return collect(
+		filters,
+		build,
+		keys=("month", "branch"),
+		sums=("invoices", "revenue", "cogs"),
+		sort=lambda row: (row.get("month") or "", row.get("branch") or ""),
 	)
 
 
 def get_top_items(filters, limit: int = 10) -> list:
-	ctx = base_query(filters)
-	selects = [
-		ctx.SII.item_name,
-		rounded_sum(ctx.SII.amount).as_("revenue"),
-		rounded_sum(ctx.SII.qty).as_("qty"),
-	]
+	def build(ctx):
+		selects = [
+			ctx.SII.item_code,
+			ctx.SII.item_name,
+			rounded_sum(ctx.amount).as_("revenue"),
+			rounded_sum(ctx.qty).as_("qty"),
+		]
 
-	cogs = cogs_expression(ctx.SII)
-	if cogs is not None:
-		selects.append(cogs.as_("cogs"))
+		if cogs_available():
+			selects.append(ctx_cogs(ctx).as_("cogs"))
 
-	return (
-		ctx.query.select(*selects)
-		.groupby(ctx.SII.item_code, ctx.SII.item_name)
-		.orderby(rounded_sum(ctx.SII.amount), order=Order.desc)
-		.limit(limit)
-		.run(as_dict=True)
+		query = (
+			ctx.query.select(*selects)
+			.groupby(ctx.SII.item_code, ctx.SII.item_name)
+			.orderby(rounded_sum(ctx.amount), order=Order.desc)
+		)
+
+		return (query if ctx.multi else query.limit(limit)).run(as_dict=True)
+
+	rows = collect(
+		filters,
+		build,
+		keys=("item_code", "item_name"),
+		sums=("revenue", "qty", "cogs"),
+		sort=lambda row: row.get("revenue") or 0,
+		reverse=True,
+		limit=limit,
 	)
+
+	return [{key: value for key, value in row.items() if key != "item_code"} for row in rows]
 
 
 def get_top_customers(filters, limit: int = 10) -> list:
-	ctx = base_query(filters, with_items=False)
-
-	return (
-		ctx.query.select(
-			ctx.SI.customer_name,
-			invoice_count(ctx.SI).as_("invoices"),
-			rounded_sum(ctx.SI.grand_total).as_("revenue"),
+	def build(ctx):
+		query = (
+			ctx.query.select(
+				ctx.customer.as_("customer"),
+				ctx.customer_name.as_("customer_name"),
+				invoice_count(ctx.SI).as_("invoices"),
+				rounded_sum(ctx.doc_total).as_("revenue"),
+			)
+			.groupby(ctx.customer, ctx.customer_name)
+			.orderby(rounded_sum(ctx.doc_total), order=Order.desc)
 		)
-		.groupby(ctx.SI.customer, ctx.SI.customer_name)
-		.orderby(rounded_sum(ctx.SI.grand_total), order=Order.desc)
-		.limit(limit)
-		.run(as_dict=True)
+
+		return (query if ctx.multi else query.limit(limit)).run(as_dict=True)
+
+	rows = collect(
+		filters,
+		build,
+		with_items=False,
+		keys=("customer", "customer_name"),
+		sums=("invoices", "revenue"),
+		sort=lambda row: row.get("revenue") or 0,
+		reverse=True,
+		limit=limit,
 	)
+
+	return [{key: value for key, value in row.items() if key != "customer"} for row in rows]
 
 
 def get_negative_margin_items(filters, limit: int = 10) -> list:
 	"""Items sold below cost. Empty when the site has no trustworthy COGS."""
-	ctx = base_query(filters)
-	cogs = cogs_expression(ctx.SII)
-
-	if cogs is None:
+	if not cogs_available():
 		return []
 
-	revenue = rounded_sum(ctx.SII.amount)
+	def build(ctx):
+		revenue = rounded_sum(ctx.amount)
+		cogs = ctx_cogs(ctx)
+		query = ctx.query.select(
+			ctx.SII.item_code, ctx.SII.item_name, revenue.as_("revenue"), cogs.as_("cogs")
+		).groupby(ctx.SII.item_code, ctx.SII.item_name)
 
-	return (
-		ctx.query.select(ctx.SII.item_name, revenue.as_("revenue"), cogs.as_("cogs"))
-		.groupby(ctx.SII.item_code, ctx.SII.item_name)
-		.having(revenue < cogs)
-		.orderby(revenue - cogs)
-		.limit(limit)
-		.run(as_dict=True)
-	)
+		if ctx.multi:
+			return query.run(as_dict=True)
+
+		return query.having(revenue < cogs).orderby(revenue - cogs).limit(limit).run(as_dict=True)
+
+	rows = collect(filters, build, keys=("item_code", "item_name"), sums=("revenue", "cogs"))
+	# Sold below cost is judged on an item's total across every source, so with more than one the
+	# rows were merged first and the test is applied here.
+	losing = [row for row in rows if (row.get("revenue") or 0) < (row.get("cogs") or 0)]
+	losing.sort(key=lambda row: (row.get("revenue") or 0) - (row.get("cogs") or 0))
+
+	return [{key: value for key, value in row.items() if key != "item_code"} for row in losing[:limit]]
 
 
 def build_analysis_prompt(data, company):

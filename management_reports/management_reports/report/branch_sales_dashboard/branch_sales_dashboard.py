@@ -13,9 +13,8 @@ from management_reports.utils.dimensions import get_branch_dimension
 from management_reports.utils.query import (
 	CHART_COLORS,
 	add_profit_columns,
-	base_query,
 	cogs_available,
-	cogs_expression,
+	ctx_cogs,
 	currency_label,
 	customer_count,
 	format_month_key,
@@ -24,6 +23,7 @@ from management_reports.utils.query import (
 	rounded_sum,
 	set_derived_profit,
 )
+from management_reports.utils.sources import collect, count_distinct, has_extra_sources
 
 
 def execute(filters=None):
@@ -85,26 +85,41 @@ def get_columns(filters):
 
 
 def get_data(filters):
-	ctx = base_query(filters)
 	currency = get_currency((filters or {}).get("company"))
+	cogs = cogs_available()
 
-	selects = [
-		ctx.branch_column.as_("branch"),
-		invoice_count(ctx.SI).as_("invoices"),
-		customer_count(ctx.SI).as_("customers"),
-		rounded_sum(ctx.SII.amount).as_("revenue"),
-	]
+	def build(ctx):
+		selects = [
+			ctx.branch_column.as_("branch"),
+			invoice_count(ctx.SI).as_("invoices"),
+			customer_count(ctx).as_("customers"),
+			rounded_sum(ctx.amount).as_("revenue"),
+		]
 
-	cogs = cogs_expression(ctx.SII)
-	if cogs is not None:
-		selects.append(cogs.as_("cogs"))
+		if cogs:
+			selects.append(ctx_cogs(ctx).as_("cogs"))
 
-	data = (
-		ctx.query.select(*selects)
-		.groupby(ctx.branch_column)
-		.orderby(rounded_sum(ctx.SII.amount), order=Order.desc)
-		.run(as_dict=True)
+		return (
+			ctx.query.select(*selects)
+			.groupby(ctx.branch_column)
+			.orderby(rounded_sum(ctx.amount), order=Order.desc)
+			.run(as_dict=True)
+		)
+
+	data = collect(
+		filters,
+		build,
+		keys=("branch",),
+		sums=("invoices", "customers", "revenue", "cogs"),
+		sort=lambda row: row.get("revenue") or 0,
+		reverse=True,
 	)
+
+	if has_extra_sources():
+		# Summed per-source customer counts would count one customer twice.
+		customers = count_distinct(filters, lambda ctx: ctx.customer, group=lambda ctx: ctx.branch_column)
+		for row in data:
+			row["customers"] = customers.get(row.get("branch"), 0)
 
 	filters = filters or {}
 	targets = get_branch_targets(filters.get("company"))
@@ -114,7 +129,7 @@ def get_data(filters):
 
 	for row in data:
 		row["currency"] = currency
-		if cogs is not None:
+		if cogs:
 			set_derived_profit(row)
 
 		target = flt(targets.get(row.get("branch"))) * months
@@ -126,19 +141,27 @@ def get_data(filters):
 
 
 def get_chart(filters):
-	ctx = base_query(filters)
 	abbr = get_company_abbr((filters or {}).get("company"))
-	month_key = month_key_column(ctx.SI)
 
-	monthly = (
-		ctx.query.select(
-			ctx.branch_column.as_("branch"),
-			month_key.as_("month_key"),
-			rounded_sum(ctx.SII.amount).as_("revenue"),
+	def build(ctx):
+		month_key = month_key_column(ctx)
+		return (
+			ctx.query.select(
+				ctx.branch_column.as_("branch"),
+				month_key.as_("month_key"),
+				rounded_sum(ctx.amount).as_("revenue"),
+			)
+			.groupby(ctx.branch_column, month_key)
+			.orderby(month_key)
+			.run(as_dict=True)
 		)
-		.groupby(ctx.branch_column, month_key)
-		.orderby(month_key)
-		.run(as_dict=True)
+
+	monthly = collect(
+		filters,
+		build,
+		keys=("branch", "month_key"),
+		sums=("revenue",),
+		sort=lambda row: row.get("month_key") or "",
 	)
 
 	if not monthly:

@@ -105,23 +105,25 @@
   },
   {
    "hidden": 0,
-   "is_query_report": 0,
+   "is_query_report": 1,
    "label": "Collections by Payment Mode",
    "link_count": 0,
    "link_to": "Collections by Payment Mode",
    "link_type": "Report",
    "onboard": 0,
-   "type": "Link"
+   "type": "Link",
+   "report_ref_doctype": "Sales Invoice"
   },
   {
    "hidden": 0,
-   "is_query_report": 0,
+   "is_query_report": 1,
    "label": "Loyalty Points Redeemed",
    "link_count": 0,
    "link_to": "Loyalty Points Redeemed",
    "link_type": "Report",
    "onboard": 0,
-   "type": "Link"
+   "type": "Link",
+   "report_ref_doctype": "Sales Invoice"
   },
   {
    "hidden": 0,
@@ -162,7 +164,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-09-28 12:00:00.000000",
+ "modified": "2026-10-24 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Management Reports",
  "name": "Management Reports",

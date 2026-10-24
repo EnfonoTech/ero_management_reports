@@ -4,13 +4,13 @@ from management_reports.management_reports.permissions import check_access
 from management_reports.utils.currency import get_currency
 from management_reports.utils.dimensions import get_branch_dimension
 from management_reports.utils.query import (
-	base_query,
 	cogs_available,
-	cogs_expression,
+	ctx_cogs,
 	currency_label,
 	invoice_count,
 	rounded_sum,
 )
+from management_reports.utils.sources import collect
 
 
 def execute(filters=None):
@@ -70,25 +70,33 @@ def get_columns(filters):
 
 
 def get_data(filters):
-	ctx = base_query(filters)
 	currency = get_currency((filters or {}).get("company"))
+	cogs = cogs_available()
 
-	selects = [
-		ctx.SI.posting_date.as_("date"),
-		ctx.branch_column.as_("branch"),
-		invoice_count(ctx.SI).as_("invoices"),
-		rounded_sum(ctx.SII.amount).as_("income"),
-	]
+	def build(ctx):
+		selects = [
+			ctx.date_column.as_("date"),
+			ctx.branch_column.as_("branch"),
+			invoice_count(ctx.SI).as_("invoices"),
+			rounded_sum(ctx.amount).as_("income"),
+		]
 
-	cogs = cogs_expression(ctx.SII)
-	if cogs is not None:
-		selects.append(cogs.as_("expenses"))
+		if cogs:
+			selects.append(ctx_cogs(ctx).as_("expenses"))
 
-	data = (
-		ctx.query.select(*selects)
-		.groupby(ctx.SI.posting_date, ctx.branch_column)
-		.orderby(ctx.branch_column)
-		.run(as_dict=True)
+		return (
+			ctx.query.select(*selects)
+			.groupby(ctx.date_column, ctx.branch_column)
+			.orderby(ctx.branch_column)
+			.run(as_dict=True)
+		)
+
+	data = collect(
+		filters,
+		build,
+		keys=("date", "branch"),
+		sums=("invoices", "income", "expenses"),
+		sort=lambda row: (row.get("branch") or ""),
 	)
 
 	returns = get_returns_by_branch(filters)
@@ -109,12 +117,15 @@ def get_returns_by_branch(filters) -> dict:
 
 	Kept as its own query so the returns figure stays visible and auditable.
 	"""
-	ctx = base_query(filters, only_returns=True)
-	rows = (
-		ctx.query.select(ctx.branch_column.as_("branch"), rounded_sum(ctx.SII.amount).as_("return_amount"))
-		.groupby(ctx.branch_column)
-		.run(as_dict=True)
-	)
+
+	def build(ctx):
+		return (
+			ctx.query.select(ctx.branch_column.as_("branch"), rounded_sum(ctx.amount).as_("return_amount"))
+			.groupby(ctx.branch_column)
+			.run(as_dict=True)
+		)
+
+	rows = collect(filters, build, only_returns=True, keys=("branch",), sums=("return_amount",))
 
 	return {row["branch"]: row["return_amount"] or 0 for row in rows}
 

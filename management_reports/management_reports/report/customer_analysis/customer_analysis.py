@@ -4,7 +4,8 @@ from frappe.query_builder import Order
 from management_reports.management_reports.permissions import check_access
 from management_reports.utils.currency import get_currency
 from management_reports.utils.dimensions import get_branch_dimension
-from management_reports.utils.query import base_query, currency_label, invoice_count, rounded_sum
+from management_reports.utils.query import currency_label, invoice_count, rounded_sum
+from management_reports.utils.sources import collect
 
 CHART_COLORS = (
 	"#0f3460",
@@ -71,19 +72,29 @@ def get_columns(filters):
 def get_data(filters):
 	currency = get_currency((filters or {}).get("company"))
 
-	# Invoice-level report: revenue is grand_total, so the item table is not joined.
-	ctx = base_query(filters, with_items=False)
-	data = (
-		ctx.query.select(
-			ctx.SI.customer,
-			ctx.SI.customer_name,
-			ctx.branch_column.as_("branch"),
-			invoice_count(ctx.SI).as_("invoices"),
-			rounded_sum(ctx.SI.grand_total).as_("revenue"),
+	# Invoice-level report: revenue is the document total, so the item table is not joined.
+	def build(ctx):
+		return (
+			ctx.query.select(
+				ctx.customer.as_("customer"),
+				ctx.customer_name.as_("customer_name"),
+				ctx.branch_column.as_("branch"),
+				invoice_count(ctx.SI).as_("invoices"),
+				rounded_sum(ctx.doc_total).as_("revenue"),
+			)
+			.groupby(ctx.customer, ctx.customer_name, ctx.branch_column)
+			.orderby(rounded_sum(ctx.doc_total), order=Order.desc)
+			.run(as_dict=True)
 		)
-		.groupby(ctx.SI.customer, ctx.SI.customer_name, ctx.branch_column)
-		.orderby(rounded_sum(ctx.SI.grand_total), order=Order.desc)
-		.run(as_dict=True)
+
+	data = collect(
+		filters,
+		build,
+		with_items=False,
+		keys=("customer", "customer_name", "branch"),
+		sums=("invoices", "revenue"),
+		sort=lambda row: row.get("revenue") or 0,
+		reverse=True,
 	)
 
 	# Share is against the same scoped population the rows come from, so the

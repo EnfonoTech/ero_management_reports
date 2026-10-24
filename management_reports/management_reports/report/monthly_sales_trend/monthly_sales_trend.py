@@ -6,9 +6,8 @@ from management_reports.utils.dimensions import get_branch_dimension
 from management_reports.utils.query import (
 	CHART_COLORS,
 	add_profit_columns,
-	base_query,
 	cogs_available,
-	cogs_expression,
+	ctx_cogs,
 	currency_label,
 	format_month_key,
 	invoice_count,
@@ -16,6 +15,7 @@ from management_reports.utils.query import (
 	rounded_sum,
 	set_derived_profit,
 )
+from management_reports.utils.sources import collect
 
 
 def execute(filters=None):
@@ -59,33 +59,41 @@ def get_columns(filters):
 
 
 def get_data(filters):
-	ctx = base_query(filters)
 	currency = get_currency((filters or {}).get("company"))
-	month_key = month_key_column(ctx.SI)
+	cogs = cogs_available()
 
-	selects = [
-		month_key.as_("month_key"),
-		ctx.branch_column.as_("branch"),
-		invoice_count(ctx.SI).as_("invoices"),
-		rounded_sum(ctx.SII.amount).as_("revenue"),
-	]
+	def build(ctx):
+		month_key = month_key_column(ctx)
+		selects = [
+			month_key.as_("month_key"),
+			ctx.branch_column.as_("branch"),
+			invoice_count(ctx.SI).as_("invoices"),
+			rounded_sum(ctx.amount).as_("revenue"),
+		]
 
-	cogs = cogs_expression(ctx.SII)
-	if cogs is not None:
-		selects.append(cogs.as_("cogs"))
+		if cogs:
+			selects.append(ctx_cogs(ctx).as_("cogs"))
 
-	data = (
-		ctx.query.select(*selects)
-		.groupby(month_key, ctx.branch_column)
-		.orderby(month_key, ctx.branch_column)
-		.run(as_dict=True)
+		return (
+			ctx.query.select(*selects)
+			.groupby(month_key, ctx.branch_column)
+			.orderby(month_key, ctx.branch_column)
+			.run(as_dict=True)
+		)
+
+	data = collect(
+		filters,
+		build,
+		keys=("month_key", "branch"),
+		sums=("invoices", "revenue", "cogs"),
+		sort=lambda row: (row.get("month_key") or "", row.get("branch") or ""),
 	)
 
 	previous_revenue = {}
 	for row in data:
 		row["currency"] = currency
 		row["month"] = format_month_key(row.get("month_key"))
-		if cogs is not None:
+		if cogs:
 			set_derived_profit(row)
 
 		# Growth is month-over-month within the same branch, so each branch
@@ -100,19 +108,27 @@ def get_data(filters):
 
 
 def get_chart(filters):
-	ctx = base_query(filters)
 	abbr = get_company_abbr((filters or {}).get("company"))
-	month_key = month_key_column(ctx.SI)
 
-	monthly = (
-		ctx.query.select(
-			ctx.branch_column.as_("branch"),
-			month_key.as_("month_key"),
-			rounded_sum(ctx.SII.amount).as_("revenue"),
+	def build(ctx):
+		month_key = month_key_column(ctx)
+		return (
+			ctx.query.select(
+				ctx.branch_column.as_("branch"),
+				month_key.as_("month_key"),
+				rounded_sum(ctx.amount).as_("revenue"),
+			)
+			.groupby(ctx.branch_column, month_key)
+			.orderby(month_key)
+			.run(as_dict=True)
 		)
-		.groupby(ctx.branch_column, month_key)
-		.orderby(month_key)
-		.run(as_dict=True)
+
+	monthly = collect(
+		filters,
+		build,
+		keys=("branch", "month_key"),
+		sums=("revenue",),
+		sort=lambda row: row.get("month_key") or "",
 	)
 
 	if not monthly:

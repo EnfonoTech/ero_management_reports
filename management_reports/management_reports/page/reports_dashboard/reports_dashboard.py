@@ -6,12 +6,12 @@ from frappe.utils import add_days, add_months, get_first_day, getdate, nowdate
 from management_reports.management_reports.permissions import check_access
 from management_reports.utils.currency import get_currency
 from management_reports.utils.query import (
-	base_query,
 	customer_count,
 	format_month_key,
 	invoice_count,
 	rounded_sum,
 )
+from management_reports.utils.sources import collect, count_distinct, has_extra_sources
 
 
 @frappe.whitelist()
@@ -68,21 +68,30 @@ def get_period_totals(company, from_date, to_date) -> frappe._dict:
 	actually open.
 	"""
 	filters = {"company": company, "from_date": from_date, "to_date": to_date}
-	ctx = base_query(filters, with_items=False)
 
-	rows = ctx.query.select(
-		rounded_sum(ctx.SI.grand_total).as_("revenue"),
-		invoice_count(ctx.SI).as_("invoices"),
-		customer_count(ctx.SI).as_("customers"),
-	).run(as_dict=True)
+	def build(ctx):
+		rows = ctx.query.select(
+			rounded_sum(ctx.doc_total).as_("revenue"),
+			invoice_count(ctx.SI).as_("invoices"),
+			customer_count(ctx).as_("customers"),
+		).run(as_dict=True)
 
+		return [frappe._dict(rows[0] if rows else {})]
+
+	# One row per period, summed over every sales source (Sales Invoice plus any additional ones).
+	rows = collect(filters, build, with_items=False, keys=(), sums=("revenue", "invoices", "customers"))
 	row = rows[0] if rows else {}
+
+	customers = row.get("customers") or 0
+	if has_extra_sources():
+		# A customer served under two sources is still one customer.
+		customers = count_distinct(filters, lambda ctx: ctx.customer).get(None, 0)
 
 	return frappe._dict(
 		{
 			"revenue": row.get("revenue") or 0,
 			"invoices": row.get("invoices") or 0,
-			"customers": row.get("customers") or 0,
+			"customers": customers,
 		}
 	)
 
@@ -90,8 +99,15 @@ def get_period_totals(company, from_date, to_date) -> frappe._dict:
 def get_active_branches(company, from_date, to_date) -> int:
 	"""Distinct branches that invoiced anything in the period."""
 	filters = {"company": company, "from_date": from_date, "to_date": to_date}
-	ctx = base_query(filters, with_items=False)
 
-	rows = ctx.query.select(Count(ctx.branch_column).distinct().as_("branches")).run(as_dict=True)
+	def build(ctx):
+		rows = ctx.query.select(Count(ctx.branch_column).distinct().as_("branches")).run(as_dict=True)
+		return [frappe._dict(rows[0] if rows else {})]
 
-	return (rows[0].get("branches") if rows else 0) or 0
+	rows = collect(filters, build, with_items=False, keys=(), sums=("branches",))
+	row = rows[0] if rows else {}
+
+	if has_extra_sources():
+		return count_distinct(filters, lambda ctx: ctx.branch_column).get(None, 0)
+
+	return row.get("branches") or 0
