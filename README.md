@@ -62,7 +62,7 @@ later stops being valid is skipped and logged. Not covered: Collections by Payme
 |-----------|-----------|
 | Backend | Python, Frappe Framework |
 | Frontend | Vanilla JS, Frappe UI, frappe.Chart |
-| AI | Anthropic Claude API (claude-sonnet-4-20250514) |
+| AI | Anthropic Claude API (claude-sonnet-5-5) |
 | Database | MariaDB (via Frappe ORM + raw SQL) |
 | Data Source | Sales Invoice, Sales Invoice Item doctypes |
 

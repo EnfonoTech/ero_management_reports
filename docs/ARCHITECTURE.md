@@ -239,7 +239,7 @@ Here's the revenue comparison:
 | branch_label | Data | What this site calls a branch — Branch / Outlet / Station. Default `Branch` |
 | cogs_source | Select | `Item Valuation` or `None`. `None` hides COGS/Profit/Margin |
 | anthropic_api_key | Password | Claude API key |
-| ai_model | Select | claude-sonnet-4-20250514, claude-3-5-haiku-20241022 |
+| ai_model | Select | claude-sonnet-5-5, claude-haiku-5-5, claude-opus-5-5 |
 | enable_ai_analysis | Check | Default: 1 |
 | auto_email_enabled | Check | For future auto email feature — no scheduler wired yet |
 | email_frequency | Select | Daily/Weekly/Monthly |

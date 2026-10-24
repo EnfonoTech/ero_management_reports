@@ -104,7 +104,7 @@ class TestModelResolution(FrappeTestCase):
 	def test_model_from_another_provider_falls_back_to_the_default(self):
 		"""Switching provider leaves a stale model in a shared Select — sending
 		gpt-4o to Anthropic would just error."""
-		self.assertEqual(get_model(self.settings(ANTHROPIC, "gpt-4o"), ANTHROPIC), "claude-sonnet-4-20250514")
+		self.assertEqual(get_model(self.settings(ANTHROPIC, "gpt-4o"), ANTHROPIC), "claude-sonnet-5-5")
 		self.assertEqual(get_model(self.settings(DEEPSEEK, "gpt-4o"), DEEPSEEK), "deepseek-chat")
 
 	def test_blank_model_falls_back(self):
@@ -144,7 +144,7 @@ class TestPayloadShape(FrappeTestCase):
 
 	def test_anthropic_shape(self):
 		self.stub_requests(body={"content": [{"text": "hello"}]})
-		reply = ai.call_ai(ANTHROPIC, "key-a", "claude-sonnet-4-20250514", prompt="hi")
+		reply = ai.call_ai(ANTHROPIC, "key-a", "claude-sonnet-5-5", prompt="hi")
 
 		self.assertEqual(reply, "hello")
 		self.assertEqual(self.captured["headers"]["x-api-key"], "key-a")
@@ -176,7 +176,7 @@ class TestPayloadShape(FrappeTestCase):
 		ai.call_ai(
 			ANTHROPIC,
 			"key-a",
-			"claude-sonnet-4-20250514",
+			"claude-sonnet-5-5",
 			system_prompt="be terse",
 			messages=[{"role": "user", "content": "hi"}],
 		)
@@ -200,3 +200,15 @@ class TestPayloadShape(FrappeTestCase):
 	def test_missing_prompt_throws(self):
 		self.stub_requests(body={"choices": [{"message": {"content": "ok"}}]})
 		self.assertRaises(frappe.ValidationError, ai.call_ai, DEEPSEEK, "key", "deepseek-chat")
+
+
+class TestRetiredModels(FrappeTestCase):
+	def test_a_saved_model_the_app_no_longer_offers_falls_back_to_the_default(self):
+		"""Anthropic retires model ids. A site that saved one (Sonnet 4 / Claude 3.5 Haiku) must not keep
+		sending it and getting 'model: …' errors from the API: it falls back to the current default."""
+		settings = frappe._dict(ai_model="claude-sonnet-4-20250514")
+		self.assertEqual(get_model(settings, ANTHROPIC), "claude-sonnet-5-5")
+		self.assertEqual(
+			get_model(frappe._dict(ai_model="claude-3-5-haiku-20241022"), ANTHROPIC), "claude-sonnet-5-5"
+		)
+		self.assertEqual(get_model(frappe._dict(ai_model="claude-haiku-5-5"), ANTHROPIC), "claude-haiku-5-5")
