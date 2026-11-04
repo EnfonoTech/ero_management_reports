@@ -215,22 +215,22 @@ function render_kpis(page, d) {
 	$("#dashboard-subtitle").text(__("Real-time sales metrics for {0}", [company_name]));
 
 	if (d.mtd_revenue) {
-		$("#kpi-mtd-revenue").text(format_currency(d.mtd_revenue, cur));
-		$("#kpi-mtd-invoices").text(format_number(d.mtd_invoices));
+		$("#kpi-mtd-revenue").text(dashboard_money(d.mtd_revenue, cur));
+		$("#kpi-mtd-invoices").text(dashboard_count(d.mtd_invoices));
 		$("#kpi-customers").text(d.mtd_customers);
 	} else if (d.last_month_revenue) {
-		$("#kpi-mtd-revenue").text(format_currency(d.last_month_revenue, cur));
+		$("#kpi-mtd-revenue").text(dashboard_money(d.last_month_revenue, cur));
 		$("#kpi-mtd-revenue-label").text(d.last_month_label + " Revenue");
-		$("#kpi-mtd-invoices").text(format_number(d.last_month_invoices));
+		$("#kpi-mtd-invoices").text(dashboard_count(d.last_month_invoices));
 		$("#kpi-mtd-invoices-label").text(d.last_month_label + " Invoices");
 		$("#kpi-customers").text(d.last_month_customers);
 		$("#kpi-customers-label").text(d.last_month_label + " Customers");
 	} else {
-		$("#kpi-mtd-revenue").text(format_currency(0, cur));
+		$("#kpi-mtd-revenue").text(dashboard_money(0, cur));
 		$("#kpi-mtd-invoices").text("0");
 		$("#kpi-customers").text("0");
 	}
-	$("#kpi-12m-revenue").text(format_currency(d.last_12m_revenue, cur));
+	$("#kpi-12m-revenue").text(dashboard_money(d.last_12m_revenue, cur));
 	$("#kpi-branches").text(d.active_branches);
 }
 
@@ -479,7 +479,10 @@ function scroll_chat() {
 	if (el) el.scrollTop = el.scrollHeight;
 }
 
-function format_currency(val, cur) {
+// Page scripts run in the global scope: a top-level `function format_currency` here replaced Frappe's own
+// for the whole desk session, so every form and report showed SAR 10.0K after visiting this page.
+// Keep helpers under dashboard-specific names.
+function dashboard_money(val, cur) {
 	cur = cur || "SAR";
 	if (!val) return cur + " 0";
 	if (val >= 1000000) return cur + " " + (val / 1000000).toFixed(1) + "M";
@@ -487,6 +490,6 @@ function format_currency(val, cur) {
 	return cur + " " + val.toFixed(0);
 }
 
-function format_number(val) {
+function dashboard_count(val) {
 	return val ? val.toLocaleString() : "0";
 }
